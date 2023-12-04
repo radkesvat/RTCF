@@ -5,31 +5,40 @@ logScope:
     topic = "Test"
 
 type MyAdapter* = ref object of Tunnel
-    data: StringView
+
+    wrotestr :string
     writebuf: seq[char]
 
 
 proc new*(t: typedesc[MyAdapter], name = "MyAdapter"): MyAdapter =
     trace "new MyAdapter"
     result = MyAdapter(name: name)
-    result.data = newStringView(cap = 8192)
-    result.data.write("salam farmande !")
     result.writebuf = newSeqOfCap[char](1500)
+    result.rv = newStringView(cap = 2000)
 
 method write*(self: MyAdapter, rp: StringView, chain: Chains = default): Future[void] =
-    trace "write to ", adapter = self.name, data = $rp
+    info "Adapter write to socket", adapter = self.name, data = $rp
 
-    var str {.cursor.} = $rp
-    self.data.reset()
-    self.data.write(str)
+    self.wv = rp
+    #wrote to socket
+    self.wrotestr =  $self.wv
+
+    self.wv.reset()
+
     result = newFuture[void]("write MyAdapter")
     result.complete()
-    # procCall write(Tunnel(self), data)
 
 method read*(self: MyAdapter, chain: Chains = default): Future[StringView] {.async.} =
-    trace "read from ", adapter = self.name, data = $self.data
+    info "Adapter read from socket", adapter = self.name, data = self.wrotestr
     let ret = newFuture[StringView]("read MyAdapter")
-    await sleepAsync(2); return self.data
+
+
+    self.rv.reset()
+
+    await sleepAsync(2)
+    self.rv.write(self.wrotestr)
+    
+    return self.rv
     # sleepAsync(2000).addCallback do(u: pointer):
     #     ret.complete self.data
     # return ret
@@ -100,16 +109,17 @@ suite "Suite for testing basic tunnel":
             var nc3: Nimche = Nimche.new(name = "nc3")
             var nc4: Nimche = Nimche.new(name = "nc4")
             nc1.chain(nc2).chain(nc3).chain(nc4).chain(MyAdapter.new())
-
-            var write_data = "hallo"
-            info "Data to send through tunnels", write_data
-            var writeview = newStringView(cap = 0)
-            writeview.write(write_data)
-            info "View to send through tunnels", writeview
-            await nc1.write(writeview)
-            let read = $(await nc1.read())
-            # print read
-            check(read == write_data)
+            
+            for i in 0..9:
+                var write_data = "hallo"
+                info "Data to send through tunnels", write_data
+                var writeview = newStringView(cap = 0)
+                writeview.write(write_data)
+                info "View to send through tunnels", writeview
+                await nc1.write(writeview)
+                let read = $(await nc1.read())
+                # print read
+                check(read == write_data)
         waitFor run()
 
 
