@@ -1,0 +1,58 @@
+name: Docgen
+on:
+  push:
+    branches:
+      - master
+      - docs
+  workflow_dispatch:
+
+jobs:
+  build:
+    timeout-minutes: 20
+
+    name: 'Generate & upload documentation'
+    runs-on: 'ubuntu-latest'
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: actions-rs/install@v0.1
+        with:
+          crate: mdbook
+          use-tool-cache: true
+          version: "0.4.35"
+      - uses: actions-rs/install@v0.1
+        with:
+          crate: mdbook-toc
+          use-tool-cache: true
+          version: "0.14.1"
+      - uses: actions-rs/install@v0.1
+        with:
+          crate: mdbook-open-on-gh
+          use-tool-cache: true
+          version: "2.4.1"
+      - uses: actions-rs/install@v0.1
+        with:
+          crate: mdbook-admonish
+          use-tool-cache: true
+          version: "1.13.1"
+
+      - uses: jiro4989/setup-nim-action@v1
+        with:
+          nim-version: '1.6.16'
+
+      - name: Generate doc
+        run: |
+          nim --version
+          nimble --version
+          nimble install -dy
+          nimble docs || true
+
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/book
+          force_orphan: true

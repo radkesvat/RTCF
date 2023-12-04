@@ -1,0 +1,26 @@
+.DS_Store
+node_modules
+/build
+/libs/nimble
+/libs/lz4
+
+
+#compiled bins
+/libs/libnet.a
+/libs/libpcap.a
+/dist
+
+#sad it uses raw paths
+src/generated/
+
+.env.local
+.env.*.local
+package-lock.json
+main_linkerArgs.txt
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.vscode/
