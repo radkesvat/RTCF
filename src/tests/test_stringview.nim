@@ -79,7 +79,7 @@ suite "testing the stringviews type and calculations":
         check(strv.len == test_buf1.len)
         # check(strv.leftCap == cap - test_buf1.len)
 
-        check(strv.rCap == cap - test_buf1.len)
+        check(strv.rCap == cap)
         check(strv.lCap == cap)
 
         check(strv.low == 0)
@@ -99,7 +99,7 @@ suite "testing the stringviews type and calculations":
 
 
             check(strv.len == test_buf1.len - x)
-            check(strv.rCap == cap - test_buf1.len)
+            check(strv.rCap == cap - x)
             check(strv.low == 0)
             check(strv.high == test_buf1.len - (x+1))
 
@@ -153,7 +153,7 @@ suite "testing the stringviews type and calculations":
 
         strv.setLen 200+1
         check(strv.len == 200+1)
-        check(strv.rCap == 256 - 201)
+        check(strv.rCap == 256)
         check(strv.low == 0)
         check(strv.high == 200)
     test "Test streaming 6":

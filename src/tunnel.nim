@@ -29,17 +29,24 @@ method init(tun: Tunnel, name: string, hsize: static[int]){.base, raises: [], gc
 
 
 
-template writeChecks*(self: Tunnel, sv: StringView, initheader: untyped) =
-    sv.shiftl(self.hsize)
+template writeChecks*(self: Tunnel, sv: StringView, init: proc(): void, writebody: untyped) =
     if self.wv != sv:
         let op = self.writeBuffer
+        sv.shiftl(self.hsize)
         let np = sv.view(self.hsize)
-        if op != nil:
-            copyMem(np, op, self.hsize)
+        sv.shiftr(self.hsize)
         self.writeBuffer = np
         self.wv = sv
-        block writeChecksInitHeader:
-            initheader
+        #doing this requires to be sure that stringview did not reallocate
+        # if op != nil:
+        #     copyMem(np, op, self.hsize)
+        # else:
+        #     init()
+        init()
+
+    block writebodyImpl:
+        defer: sv.shiftl(self.hsize)
+        writebody
         # self.wv.shiftl(self.hsize)
 
 template readChecks*(self: Tunnel, sv: StringView, initheader: untyped) =

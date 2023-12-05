@@ -51,15 +51,15 @@ type Nimche = ref object of Tunnel
     mark: string
 
 proc new*(t: typedesc[Nimche], name = "unnamed tunenl"): Nimche =
-    trace "new Tunnel", name = "nimche"
+    trace "new Tunnel", name 
     result = Nimche(name: name, hsize: 5)
     result.mark = " " & name & " "
 
-method write*(self: Nimche, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
-    writeChecks(self, data):
-        copyMem(self.writeBuffer, addr self.mark[0], self.mark.len)
 
-    trace "Appended ", header = (string.fromBytes(makeOpenArray(self.writeBuffer, byte, self.hsize))), result = ($data)
+method write*(self: Nimche, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
+    proc firstWrite() = copyMem(self.writeBuffer, addr self.mark[0], self.hsize)
+    writeChecks(self, data , firstWrite):
+        trace "Appended ", header = (string.fromBytes(makeOpenArray(self.writeBuffer, byte, self.hsize))), result = ($data) , name=self.name
 
     procCall write(Tunnel(self), data)
 
@@ -122,7 +122,25 @@ suite "Suite for testing basic tunnel":
                 check(read == write_data)
         waitFor run()
 
-
+    test "what happens with multi write with 0 cap":
+        proc run() {.async.} =
+            var nc1: Nimche = Nimche.new(name = "nc1")
+            var nc2: Nimche = Nimche.new(name = "nc2")
+            var nc3: Nimche = Nimche.new(name = "nc3")
+            var nc4: Nimche = Nimche.new(name = "nc4")
+            nc1.chain(nc2).chain(nc3).chain(nc4).chain(MyAdapter.new())
+            
+            var write_data = "hallo"
+            info "Data to send through tunnels", write_data
+            var writeview = newStringView(cap = 0)
+            writeview.write(write_data)
+            info "View to send through tunnels", writeview
+            for i in 0..9:
+                await nc1.write(writeview)
+                let read = $(await nc1.read())
+                # print read
+                check(read == write_data)
+        waitFor run()
 
 
 

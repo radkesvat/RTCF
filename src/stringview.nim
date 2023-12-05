@@ -44,6 +44,7 @@ type
         saved: int        #low level
         exportflag: bool
 
+
 when ncstr:
     type
         NimStringV2 = object
@@ -79,7 +80,7 @@ template buf*(v: StringView | typeof(StringView()[])): ptr UncheckedArray[char] 
 #how many bytes we can fill without realloc
 proc lCap*(v: StringView | typeof(StringView()[])): int {.inline.} = v.curpos
 
-proc rCap*(v: StringView | typeof(StringView()[])): int {.inline.} = (v.cap * 2 - v.lenpos)
+proc rCap*(v: StringView | typeof(StringView()[])): int {.inline.} = (v.cap * 2 - v.curpos)
 
 
 proc safeAfterExport(v: StringView) =
@@ -241,7 +242,7 @@ proc setLen*(v: StringView; ln: int) =
 
 
 proc view*(v: StringView; bytes: int): ptr UncheckedArray[byte] =
-    if bytes == 0: return nil
+    assert bytes != 0
     assert v.curpos + bytes < v.cap * 2
     result = cast[ptr UncheckedArray[byte]](addr v.pbuf.data[v.curpos])
 
