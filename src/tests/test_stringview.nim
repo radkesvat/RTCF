@@ -121,7 +121,7 @@ suite "testing the stringviews type and calculations":
 
                 check(strv.len == test_buf1.len - x)
                 check(strv.rCap == cap - test_buf1.len)
-                check(strv.low == x)
+                check(strv.low == 0)
                 check(strv.high == test_buf1.len-1)
                 check(strv.buf == (old_buf.offset x))
 
@@ -220,7 +220,7 @@ suite "testing the stringviews type and calculations":
             check(strv.len == 0)
             check(strv.high == -1)
 
-    
+
     test "test views and shifts simple 2":
         strv = newStringView(cap = 0)
         for i in 0..test_buf1.high:
@@ -247,7 +247,7 @@ suite "testing the stringviews type and calculations":
             strv.reset()
             checkpoint("checkpoint i = " & $i)
 
-    
+
     test "test views and shifts simple 4":
         strv = newStringView(cap = 0)
         strv.shiftl(2000)
@@ -266,16 +266,6 @@ suite "testing the stringviews type and calculations":
             check(strv.len == 0)
             check(strv.lCap == lcap)
             checkpoint("checkpoint i = " & $i)
-    
-    test "test views and shifts simple 5":
-        strv = newStringView(cap = 0)
-        strv.shiftl(2000)
-        strv.write "salam"
-        for i in 0.."salam".high:
-            strv.shiftr(1)
-        
-        expect AssertionDefect:
-            strv.shiftr(1)
 
     test "test views and shifts simple 5":
         strv = newStringView(cap = 0)
@@ -283,19 +273,57 @@ suite "testing the stringviews type and calculations":
         strv.write "salam"
         for i in 0.."salam".high:
             strv.shiftr(1)
-        
+
         expect AssertionDefect:
             strv.shiftr(1)
 
-    test "test views and shifts simple 5":
+    test "test views and shifts simple 6":
         strv = newStringView(cap = 0)
         strv.shiftl(2000)
         strv.write "salam"
         for i in 0.."salam".high:
             strv.shiftr(1)
-        
+
         expect AssertionDefect:
-            strv.shiftr(1)     
+            strv.shiftr(1)
+
+    test "test views and shifts simple 7":
+        strv = newStringView(cap = 0)
+        strv.shiftl(2000)
+        strv.write "salam"
+        for i in 0.."salam".high:
+            strv.shiftr(1)
+
+        expect AssertionDefect:
+            strv.shiftr(1)
+
+    test "test views and shifts complex":
+        strv = newStringView(cap = 0)
+        strv.shiftl 1
+        strv.write "abc"
+
+        let v1 = strv.view(1)
+        strv.shiftr 1
+
+        let v2 = strv.view(1)
+        strv.shiftr 1
+
+        let v3 = strv.view(1)
+
+        expect AssertionDefect:
+            discard strv.view(2)
+
+        proc must() =
+            check(v1.at[0] == 'a')
+            check(v2.at[0] == 'b')
+            check(v3.at[0] == 'c')
+        must()
+        for i in 0..500: strv.shiftl 1; must()
+        for i in 0..500: strv.shiftr 1; must()
+        strv.reserve(200)
+        for i in 0..200: strv.shiftl 1; must()
+        for i in 0..400: strv.shiftr 1; must()
+
 
 
     test "stremaing and shifts 1":
@@ -304,7 +332,7 @@ suite "testing the stringviews type and calculations":
             strv.write $(i.chr)
             strv.shiftr 1
 
-        for i in countdown(100,0):
+        for i in countdown(100, 0):
             strv.shiftl 1
             check($strv == $(i.char))
             strv.consume 1
@@ -317,12 +345,12 @@ suite "testing the stringviews type and calculations":
             strv.write phrase
             strv.shiftr phrase.len
 
-        for i in countdown(100,0):
+        for i in countdown(100, 0):
             strv.shiftl phrase.len
             check($strv == phrase)
             strv.consume phrase.len
             checkpoint("check point i = " & $i)
-  
+
 
 
     suiteTeardown:

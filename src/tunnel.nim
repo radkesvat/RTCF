@@ -19,8 +19,15 @@ type
         hsize: int
         rv*: StringView
         wv*: StringView
-        readBuffer*: ptr UncheckedArray[byte]
-        writeBuffer*: ptr UncheckedArray[byte]
+        readBuffer*: View
+        writeBuffer*: View
+
+    #raised when a tunnel dose not satisfy to continue the process
+    FlowError = object of CatchableError
+        tunnel: Tunnel
+    FlowReadError* = ref object of FlowError
+    FlowWriteError* = ref object of FlowError
+
 
 method init(tun: Tunnel, name: string, hsize: static[int]){.base, raises: [], gcsafe.} =
     tun.name = name
@@ -29,39 +36,39 @@ method init(tun: Tunnel, name: string, hsize: static[int]){.base, raises: [], gc
 
 
 
-template writeChecks*(self: Tunnel, sv: StringView, init: proc(): void, writebody: untyped) =
-    if self.wv != sv:
-        let op = self.writeBuffer
-        sv.shiftl(self.hsize)
-        let np = sv.view(self.hsize)
-        sv.shiftr(self.hsize)
-        self.writeBuffer = np
-        self.wv = sv
-        #doing this requires to be sure that stringview did not reallocate
-        # if op != nil:
-        #     copyMem(np, op, self.hsize)
-        # else:
-        #     init()
-        init()
-
+template writeChecks*(self: Tunnel, sv: StringView, writebody: untyped) =
+    assert sv != nil
+    self.wv = sv
+    self.wv.shiftl(self.hsize)
+    let first = self.writeBuffer == nil
+    self.writeBuffer = self.wv.view(self.hsize)
+    self.wv.shiftr(self.hsize)
     block writebodyImpl:
-        defer: sv.shiftl(self.hsize)
+        defer: self.wv.shiftl(self.hsize)
+        let firstwrite {.inject.} = first
         writebody
-        # self.wv.shiftl(self.hsize)
 
-template readChecks*(self: Tunnel, sv: StringView, initheader: untyped) =
-    if self.rv != sv:
-        let op = self.readBuffer
-        let np = sv.view(self.hsize)
-        sv.shiftr(self.hsize)
-        if op != nil:
-            copyMem(np, op, self.hsize)
-        self.readBuffer = np
+
+
+
+template readChecks*(self: Tunnel, sv: StringView, readbody: untyped) =
+    assert sv != nil
+    block readchecks:
         self.rv = sv
-        block readChecksInitHeader:
-            initheader
-    else:
-        sv.shiftr(self.hsize)
+        let first = self.writeBuffer == nil
+
+        if self.rv.len < self.hsize:
+            error "stream finished before full header was read.", tunnel = self.name, hsize = self.hsize
+            self.rv.reset()
+            raise FlowReadError(msg: "stream finished before full header was read.", tunnel: self)
+            break readchecks
+        self.readBuffer = self.rv.view(self.hsize)
+        self.rv.shiftr(self.hsize)
+        block body:
+            let firstread {.inject.} = first
+            readbody
+
+
 
 
 # method inBound*(self: Tunnel, `from`: Tunnel, chain: ChainTarget){.base, gcsafe, raises: [].} =

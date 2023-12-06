@@ -3,30 +3,15 @@ import stew/byteutils
 
 
 
-# var sv = newStringView(cap = 0)
+var datab = cast[ptr[char]](alloc0(100))
+var data =  cast[ptr UncheckedArray[char]](addr datab[])
+print datab
+print data
 
-# var x = "12345679"
+data[0]='a'
+data[1]='b'
+data[2]='c'
+# var uc = cast[UncheckedArray[char]](data)
 
-# sv.write(x)
-
-# sv.buf[0] = 'y'
-
-
-# var sequence = bytes(sv)
-# print sequence 
-
-# sv.buf[0] = 'y'
-# print sequence
-
-var str = "abc"
-prepareMutation(str)
-var sequence {.cursor.} = cast[seq[char]](str)
-str[0] = 'x'
-echo str , " : ", sequence
-#    xbc : @['a', 'b', 'c']
-
-# var s = cast[seq[byte]](x)
-
-# print s
-
-
+# print data[0]
+print data[][1]
