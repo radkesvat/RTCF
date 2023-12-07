@@ -1,7 +1,7 @@
 import pretty,sugar,rope,strutils,stringview
 import stew/byteutils
 
-
+import hashes
 
 var datab = cast[ptr[char]](alloc0(100))
 var data =  cast[ptr UncheckedArray[char]](addr datab[])

@@ -1,20 +1,36 @@
-import rope, stew/byteutils, stringview, chronos
+import rope, stew/byteutils, stringview, chronos, hashes
 
-export rope, byteutils, stringview, chronos
+export rope, byteutils, stringview, chronos, hashes
 
 logScope:
     topic = "Tunnel"
+
+{.push raises: [].}
 
 type
     Chains* = enum
         default,
         alternative
+    Signals* = enum
+        invalid,
+        close,
+        pause,
+        resume
+
+    SigDirection* = enum
+        left, right, both
+
+    InfoTag* = distinct int
+
+    InfoBox* = tuple[tag: InfoTag, size: int, value: pointer]
 
     Chain* {.acyclic.} = object
         prev*, next*: Tunnel
 
     Tunnel*{.acyclic.} = ref object of Rootref
-        name: string
+        name*: string
+        hash: Hash
+
         ties: array[Chains, Chain]
         hsize: int
         rv*: StringView
@@ -28,35 +44,37 @@ type
     FlowReadError* = ref object of FlowError
     FlowWriteError* = ref object of FlowError
 
+proc `==`*(x, y: InfoTag): bool {.borrow.}
+proc `$`*(x: InfoTag): string {.borrow.}
 
-method init(tun: Tunnel, name: string, hsize: static[int]){.base, raises: [], gcsafe.} =
-    tun.name = name
-    tun.hsize = hsize
+template name*(self: Tunnel): string = self.name
+template hsize*(self: Tunnel): int = self.hsize
+
+method init*(self: Tunnel, name: string, hsize: static[int]){.base, gcsafe.} =
+    self.name = name
+    self.hash = hash(name)
+    self.hsize = hsize
     #some other init things for any tunnel ?
 
 
 
 template writeChecks*(self: Tunnel, sv: StringView, writebody: untyped) =
-    assert sv != nil
     self.wv = sv
+    assert self.wv != nil
     self.wv.shiftl(self.hsize)
-    let first = self.writeBuffer == nil
     self.writeBuffer = self.wv.view(self.hsize)
     self.wv.shiftr(self.hsize)
     block writebodyImpl:
         defer: self.wv.shiftl(self.hsize)
-        let firstwrite {.inject.} = first
         writebody
 
 
 
 
 template readChecks*(self: Tunnel, sv: StringView, readbody: untyped) =
-    assert sv != nil
     block readchecks:
         self.rv = sv
-        let first = self.writeBuffer == nil
-
+        assert self.rv != nil
         if self.rv.len < self.hsize:
             error "stream finished before full header was read.", tunnel = self.name, hsize = self.hsize
             self.rv.reset()
@@ -65,12 +83,48 @@ template readChecks*(self: Tunnel, sv: StringView, readbody: untyped) =
         self.readBuffer = self.rv.view(self.hsize)
         self.rv.shiftr(self.hsize)
         block body:
-            let firstread {.inject.} = first
             readbody
 
 
+method requestInfo*(self: Tunnel, target: Hash, dir: SigDirection, tag: InfoTag, chain: Chains = default): ref InfoBox {.base, gcsafe.} =
+    case dir:
+        of left:
+            if self.ties[chain].prev != nil:
+                self.ties[chain].prev.requestInfo(target, dir, tag, chain)
+            else: nil
+        of right:
+            if self.ties[chain].next != nil:
+                self.ties[chain].next.requestInfo(target, dir, tag, chain)
+            else: nil
+        of both:
+            var res: ref InfoBox = nil
+            if self.ties[chain].next != nil:
+                res = self.ties[chain].next.requestInfo(target, right, tag, chain)
+            if res == nil and  self.ties[chain].prev != nil:
+                res = self.ties[chain].prev.requestInfo(target, left, tag, chain)
+            res
+
+template requestInfo*(self: Tunnel, target: string, dir: SigDirection, tag: InfoTag, chain: Chains = default): ref InfoBox =
+    requestInfo(self, hash(target), dir, tag, chain)
+
+method signal*(self: Tunnel, dir: SigDirection, sig: Signals, chain: Chains = default){.base, gcsafe.} =
+    case dir:
+        of left:
+            if self.ties[chain].prev != nil:
+                self.ties[chain].prev.signal(dir, sig, chain)
+        of right:
+            if self.ties[chain].next != nil:
+                self.ties[chain].next.signal(dir, sig, chain)
+        of both:
+            if self.ties[chain].next != nil:
+                self.ties[chain].next.signal(right, sig, chain)
+            if self.ties[chain].prev != nil:
+                self.ties[chain].prev.signal(left, sig, chain)
 
 
+
+
+proc isMe*(self: Tunnel, hash: Hash): bool = self.hash == hash
 # method inBound*(self: Tunnel, `from`: Tunnel, chain: ChainTarget){.base, gcsafe, raises: [].} =
 #     case chain:
 #         of main:
@@ -96,7 +150,7 @@ template readChecks*(self: Tunnel, sv: StringView, readbody: untyped) =
 #     `from`.next = `to`
 #     `to`
 
-proc chain*(`from`: Tunnel, `to`: Tunnel, chainfrom: Chains = default, chainto: Chains = default): Tunnel {.raises: [], gcsafe, discardable.} =
+proc chain*(`from`: Tunnel, `to`: Tunnel, chainfrom: Chains = default, chainto: Chains = default): Tunnel {.gcsafe, discardable.} =
     `from`.ties[chainfrom].next = `to`
     `to`.ties[chainto].prev = `from`
     `to`
@@ -109,9 +163,8 @@ proc chain*(`from`: Tunnel, `to`: Tunnel, chainfrom: Chains = default, chainto: 
 # template nextAlt*(self: Tunnel): Tunnel = self.alt.next
 # template prevAlt*(self: Tunnel): Tunnel = self.alt.prev
 
-template name*(self: Tunnel): string = self.name
-template hsize*(self: Tunnel): int = self.hsize
-template `name=`*(self: Tunnel, name: string) = self.name = name
+
+# template `name=`*(self: Tunnel, name: string) = self.name = name
 
 
 # proc init*(t: Tunnel,tag:TunnelTag = TunnelTag.None, name = "unnamed tunenl") =
@@ -119,14 +172,14 @@ template `name=`*(self: Tunnel, name: string) = self.name = name
 #     t.name = name
 
 
-method write*(self: Tunnel, data: StringView, chain: Chains = default): Future[void] {.base, raises: [], gcsafe.} =
+method write*(self: Tunnel, data: StringView, chain: Chains = default): Future[void] {.base, gcsafe.} =
     let next = self.ties[chain].next
     assert not next.isNil
     return next.write(data, chain)
 
 
 
-method read*(self: Tunnel, chain: Chains = default): Future[StringView] {.base, raises: [], gcsafe.} =
+method read*(self: Tunnel, chain: Chains = default): Future[StringView] {.base gcsafe.} =
     # return self.next.read()
     let next = self.ties[chain].next
     assert not next.isNil
