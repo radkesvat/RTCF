@@ -112,6 +112,7 @@ task build_libnet, "builds libnet(1.2) x64 static":
             exec "make"
 
 task install, "install nim deps":
+    require malebolgia
     require pretty
     require benchy
     require websock
