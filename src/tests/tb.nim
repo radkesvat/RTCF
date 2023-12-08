@@ -7,6 +7,12 @@ import std/exitprocs
 import system / ansi_c
 
 
+
+
+
+
+
+
 #returns logical cores which each ``can`` run a thread
 let numProcs = countProcessors() - 1
 

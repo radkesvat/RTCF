@@ -11,11 +11,15 @@ type
     Chains* = enum
         default,
         alternative
+
     Signals* = enum
         invalid,
-        close,
+        start,
         pause,
-        resume
+        resume,
+        close,
+        stop,
+        breakthrough
 
     SigDirection* = enum
         left, right, both
@@ -107,6 +111,14 @@ method requestInfo*(self: Tunnel, target: Hash, dir: SigDirection, tag: InfoTag,
 template requestInfo*(self: Tunnel, target: string, dir: SigDirection, tag: InfoTag, chain: Chains = default): ref InfoBox =
     requestInfo(self, hash(target), dir, tag, chain)
 
+
+
+
+
+
+
+
+
 method signal*(self: Tunnel, dir: SigDirection, sig: Signals, chain: Chains = default){.base, gcsafe.} =
     case dir:
         of left:
@@ -120,8 +132,10 @@ method signal*(self: Tunnel, dir: SigDirection, sig: Signals, chain: Chains = de
                 self.ties[chain].next.signal(right, sig, chain)
             if self.ties[chain].prev != nil:
                 self.ties[chain].prev.signal(left, sig, chain)
-
-
+    case sig:
+        of breakthrough:
+            for c in mitems(self.ties): c.reset()
+        else: discard
 
 
 proc isMe*(self: Tunnel, hash: Hash): bool = self.hash == hash

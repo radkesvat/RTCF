@@ -80,6 +80,7 @@ method read*(self: Nimche, chain: Chains = default): Future[StringView] {.async.
 
 method signal*(self: Nimche, dir: SigDirection, sig: Signals, chain: Chains = default) =
     info "Forwarding signal", name = self.name, sig = sig
+    #if you want do something, then forward to others
     procCall signal(Tunnel(self), dir, sig, chain)
 
 method requestInfo*(self: Nimche, target: Hash, dir: SigDirection, tag: InfoTag, chain: Chains = default): ref InfoBox {.gcsafe.} =
