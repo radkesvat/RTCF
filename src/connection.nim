@@ -299,7 +299,6 @@ proc new*(ctype: typedesc[Connection], transp: StreamTransport, scheme: SocketSc
                     estabilished: newAsyncEvent(),
                     last_action: et,
 
-
                     )
                     res
 
