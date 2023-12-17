@@ -36,8 +36,9 @@ suite "testing the stringviews type and calculations":
 
     test "Test Hooks":
         strv.write("salam")
-        var strv2: StringView = StringView()
+        var strv2: StringView = newStringView(0)
         check(strv2 != nil)
+        destroy strv2
         strv2 = strv
         check(strv2.len == strv.len)
         check(strv2.lCap == strv.lCap)
@@ -54,7 +55,7 @@ suite "testing the stringviews type and calculations":
         # `=wasMoved`(strv[])
         # echo strv.repr
         # echo(strv2.buf == strv.buf)
-        check((strv[] == zeroDefault(typeof(StringView()[]))))
+        check((strv[] == zeroDefault(typeof(newStringView(0)[]))))
 
         checkpoint "Tested sink"
 
@@ -324,8 +325,6 @@ suite "testing the stringviews type and calculations":
         for i in 0..200: strv.shiftl 1; must()
         for i in 0..400: strv.shiftr 1; must()
 
-
-
     test "stremaing and shifts 1":
         strv = newStringView(cap = 0)
         for i in 0 .. 100:
@@ -350,8 +349,6 @@ suite "testing the stringviews type and calculations":
             check($strv == phrase)
             strv.consume phrase.len
             checkpoint("check point i = " & $i)
-
-
 
     suiteTeardown:
         echo "End Suite"

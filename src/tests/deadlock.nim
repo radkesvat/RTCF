@@ -1,5 +1,7 @@
 import threading/channels, std/isolation
 
+
+#since the bug fixed long time ago this wont deadlock
 proc test(chan: ptr Chan[string]) {.thread.} =
   var notSent = true
   while notSent:

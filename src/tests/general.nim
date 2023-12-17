@@ -1,17 +1,22 @@
-import pretty,sugar,rope,strutils,stringview
-import stew/byteutils
+import pretty,sugar,rope,strutils,chronos
+import stew/byteutils,threading/channels
+import chronos/threadsync,cpuinfo
 
-import hashes
 
-var datab = cast[ptr[char]](alloc0(100))
-var data =  cast[ptr UncheckedArray[char]](addr datab[])
-print datab
-print data
+#returns logical cores which each ``can`` run a thread
+let numProcs = countProcessors() 
+var chan : Chan[int] = newChan[int]()
 
-data[0]='a'
-data[1]='b'
-data[2]='c'
-# var uc = cast[UncheckedArray[char]](data)
+proc run(arg: int) {.thread.} =
+    while true:
+        cpuRelax()
+                                        
+var threads = newSeq[Thread[int]](numProcs)
+for i in 0 ..< numProcs:
+    createThread(threads[i], run, i+1)
 
-# print data[0]
-print data[][1]
+
+
+
+joinThreads(threads)
+ 

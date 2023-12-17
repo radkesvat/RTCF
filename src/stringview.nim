@@ -15,8 +15,8 @@
 # made for orc gc in mind
 
 import stew/byteutils, math, ptrops, sequtils
-
-export ptrops
+import threading/atomics, std/isolation
+export ptrops, isolation
 
 const log_hooks {.booldefine.} = false
 const ncstr = defined(nimSeqsV2) #yard said don't do that :(
@@ -35,7 +35,7 @@ type
         cap: int #fake cap / same as len
         data: UncheckedArray[char]
 
-    StringView* {.acyclic.} = ref object of RootRef
+    StringViewImpl {.acyclic.} = object
         lenpos: int
         curpos: int
         cap: int
@@ -44,9 +44,13 @@ type
         exportflag: bool
         views: seq[View]
 
-    View* = ref object
+    StringView* = ptr StringViewImpl
+
+    View* = ptr object
         at*: ptr UncheckedArray[char]
         offset: int
+
+
 when ncstr:
     type
         NimStringV2 = object
@@ -54,51 +58,62 @@ when ncstr:
             p: ptr Payload ## can be nil if len == 0.
         NimSeqV2 = NimStringV2
 
-
+const hasThreadSupport = compileOption("threads")
 
 template contentSize(cap): int = cap + 1 + sizeof(PayloadBase)
 
+
+
+proc raiseNilAccess() {.noinline.} =
+    raise newException(NilAccessDefect, "dereferencing nil smart pointer")
+
+template checkNotNil(p: typed) =
+    when compileOption("boundChecks"):
+        {.line.}:
+            if p.isNil:
+                raiseNilAccess()
+
+
+
+
 # how much data you can read ? or shift ofc
-proc `len`*(v: StringView | typeof(StringView()[])): int {.inline.} = v.lenpos - v.curpos
-
-
+proc `len`*(v: StringView): int {.inline.} = v[].lenpos - v[].curpos
 
 # using buf function you have these
-proc `high`*(v: StringView | typeof(StringView()[])): int = v.len - 1
-proc `low`*(v: StringView | typeof(StringView()[])): int = 0
+proc `high`*(v: StringView): int = v.len - 1
+proc `low`*(v: StringView): int = 0
 
 
 # this is the buffer, you can use for reading or writing to it
-template buf*(v: StringView | typeof(StringView()[])): ptr UncheckedArray[char] =
-    cast[ptr UncheckedArray[char]](addr v.pbuf.data[v.curpos])
+template buf*(v: StringView): ptr UncheckedArray[char] =
+    cast[ptr UncheckedArray[char]](addr (v[].pbuf.data[v[].curpos]))
 
 
 
 # how many bytes we can fill without realloc
-proc lCap*(v: StringView | typeof(StringView()[])): int {.inline.} = v.curpos
-proc rCap*(v: StringView | typeof(StringView()[])): int {.inline.} = (v.cap * 2 - v.curpos)
+proc lCap*(v: StringView): int {.inline.} = v[].curpos
+proc rCap*(v: StringView): int {.inline.} = (v[].cap * 2 - v[].curpos)
 
 
 proc safeAfterExport(v: StringView) =
     when ncstr:
-        if v.exportflag:
-            (cast[ptr Payload](v.buf().offset -sizeof(PayloadBase))).cap = v.backup
+        if v[].exportflag:
+            (cast[ptr Payload](v.buf().offset -sizeof(PayloadBase))).cap = v[].backup
     else: discard
 
-proc `=destroy`*(x: typeof(StringView()[])) =
-    when log_hooks: echo "=destroy StringView"
-
+proc `=destroy`*(x: StringViewImpl) =
+    when log_hooks: echo "=destroy StringViewImpl"
     if x.pbuf != nil:
-        when compileOption("threads"):
+        when hasThreadSupport:
             deallocShared(x.pbuf)
         else:
             dealloc(x.pbuf)
 
-proc `=copy`*(a: var typeof(StringView()[]); b: typeof(StringView()[])) {.error: "not for me!".} =
-    # do nothing for self-assignments:
 
-    if a.pbuf == b.pbuf: return
-    when log_hooks: echo "=copy StringView"
+proc `=copy`*(a: var StringViewImpl; b: StringViewImpl) {.error: "not for me!".} =
+    # do nothing for self-assignments:
+    if a[].pbuf == b[].pbuf: return
+    when log_hooks: echo "=copy StringViewImpl"
 
     `=destroy`(a)
     wasMoved(a)
@@ -112,14 +127,14 @@ proc `=copy`*(a: var typeof(StringView()[]); b: typeof(StringView()[])) {.error:
 
     if b.pbuf != nil:
         let realcap = a.cap * 2
-        when compileOption("threads"):
+        when hasThreadSupport:
             a.pbuf = cast[typeof(a.pbuf)](allocShared((contentSize realcap)))
         else:
             a.pbuf = cast[typeof(a.pbuf)](alloc((contentSize realcap)))
 
         copyMem(addr a.pbuf.data[0], addr b.pbuf.data[0], a.cap *2 + 1)
 
-proc `=dup`*(a: typeof(StringView()[])): typeof(StringView()[]) {.nodestroy, error: "not for me!".} =
+proc `=dup`*(a: StringViewImpl): StringViewImpl {.nodestroy, error: "not for me!".} =
     # an optimized version of `=wasMoved(tmp); `=copy(tmp, src)`
     # usually present if a custom `=copy` hook is overridden
     when log_hooks: echo "=dup StringView"
@@ -133,14 +148,14 @@ proc `=dup`*(a: typeof(StringView()[])): typeof(StringView()[]) {.nodestroy, err
 
     if b.pbuf != nil:
         let realcap = a.cap * 2
-        when compileOption("threads"):
+        when hasThreadSupport:
             a.pbuf = cast[typeof(a.pbuf)](allocShared((contentSize realcap)))
         else:
             a.pbuf = cast[typeof(a.pbuf)](alloc((contentSize realcap)))
 
         copyMem(addr a.pbuf.data[0], addr b.pbuf.data[0], a.cap *2 + 1)
 
-proc `=sink`*(a: var typeof(StringView()[]); b: typeof(StringView()[])) =
+proc `=sink`*(a: var StringViewImpl; b: StringViewImpl) =
     # move assignment, optional.
     # Compiler is using `=destroy` and `copyMem` when not provided
     when log_hooks: echo "=sink StringView"
@@ -165,6 +180,11 @@ proc `=sink`*(a: var typeof(StringView()[]); b: typeof(StringView()[])) =
     #     a.views[i].owner = addr (a[])
     # b.views.setLen(0)
     # wasMoved(b.views)
+
+
+
+
+## can only be moved.
 
 # exporting to string without copy ... Hmm not needed this because we use seq[byte]
 # template withString*(v: StringView; name: untyped; code: untyped) =
@@ -193,10 +213,10 @@ template bytes*(v: StringView; name: untyped; code: untyped) =
     var name{.inject, cursor.}: seq[byte]
     when ncstr:
         safeAfterExport(v)
-        v.exportflag = true
+        v[].exportflag = true
         var p: ptr Payload = cast[ptr Payload](v.buf().offset -sizeof(PayloadBase))
-        v.backup = p.cap
-        p.cap = v.len
+        v[].backup = p.cap
+        p[].cap = v.len
         name = cast[seq[byte]](NimSeqV2(len: v.len, p: p))
         return res
     else:
@@ -214,28 +234,28 @@ proc cstring*(v: StringView): cstring =
 
 # when you need more size
 proc expand(v: StringView; increase: int) =
-    let newcap = pow(2, ceil(log2((v.cap*2).float + (increase.float*2)))).int
-    warn "allocated more memory! ", oldcap = v.cap*2, increase, newcap
+    let newcap = pow(2, ceil(log2((v[].cap*2).float + (increase.float*2)))).int
+    warn "allocated more memory! ", oldcap = v[].cap*2, increase, newcap
 
-    when compileOption("threads"):
-        v.pbuf = cast[ptr Payload](reallocShared(v.pbuf, contentSize newcap))
+    when hasThreadSupport:
+        v[].pbuf = cast[ptr Payload](reallocShared(v[].pbuf, contentSize newcap))
     else:
-        v.pbuf = cast[ptr Payload](realloc(v.pbuf, contentSize newcap))
+        v[].pbuf = cast[ptr Payload](realloc(v[].pbuf, contentSize newcap))
 
-    let dif = (newcap div 2) - v.cap
+    let dif = (newcap div 2) - v[].cap
 
-    moveMem(addr v.pbuf.data[dif], addr v.pbuf.data[0], v.cap*2)
+    moveMem(addr v[].pbuf.data[dif], addr v[].pbuf.data[0], v[].cap*2)
 
-    v.curpos += dif
-    v.lenpos += dif
+    v[].curpos += dif
+    v[].lenpos += dif
     # info "positions", cur =  v.curpos
-    for track in v.views:
+    for track in v[].views:
         track.offset = dif+track.offset
-        track.at = cast[ptr UncheckedArray[char]](addr v.pbuf.data[track.offset])
-    v.pbuf.data[newcap] = 0.char
+        track.at = cast[ptr UncheckedArray[char]](addr v[].pbuf.data[track.offset])
+    v[].pbuf.data[newcap] = 0.char
 
 
-    v.cap = newcap div 2
+    v[].cap = newcap div 2
 
 
 # simply writes to buf() , you can use of toOpenArray for your type to write witohut copy
@@ -243,7 +263,7 @@ proc write*(v: StringView; d: openArray[byte|char]) =
     if v.rCap < d.len:
         expand(v, (d.len - v.rCap))
     copyMem(v.buf(), addr d[0], d.len)
-    v.lenpos = v.curpos + d.len
+    v[].lenpos = v[].curpos + d.len
 
 # bad idea but we try to move your string
 proc write*(v: StringView; d: sink string) =
@@ -260,63 +280,98 @@ proc setLen*(v: StringView; ln: int) =
     assert ln >= 0
     if v.rCap < ln:
         expand(v, (ln - v.rCap))
-    v.lenpos = v.curpos + ln
+    v[].lenpos = v[].curpos + ln
 
 # most efficent way of reading/writing fixed size data
 proc view*(v: StringView; bytes: int): View =
     assert bytes != 0
-    assert v.curpos + bytes <= v.cap * 2, "cap = " & $(v.cap*2) & "cur = " & $v.curpos
-    result = new View
-    result.offset = v.curpos
-    result.at = cast[ptr UncheckedArray[char]](addr v.pbuf.data[v.curpos])
-    v.views.add result
+    assert v[].curpos + bytes <= v[].cap * 2, "cap = " & $(v[].cap*2) & "cur = " & $v[].curpos
+    when hasThreadSupport:
+        result = cast[View](allocShared(sizeof View))
+    else:
+        result = cast[View](alloc(sizeof View))
 
-proc isValid*(strv: StringView; v: View): bool = strv.views.contains v
+    result.offset = v[].curpos
+    result.at = cast[ptr UncheckedArray[char]](addr v[].pbuf.data[v[].curpos])
+    v[].views.add result
+
+proc isValid*(strv: StringView; v: View): bool = strv[].views.contains v
 
 
 proc shiftl*(v: StringView; bytes: int) =
     if v.lCap < bytes:
         expand(v, (bytes - v.lCap))
-    v.curpos -= bytes
+    v[].curpos -= bytes
 
 
 proc shiftr*(v: StringView; bytes: int) =
-    assert v.curpos + bytes <= v.lenpos # we can but dont want negative len !
+    assert v[].curpos + bytes <= v[].lenpos # we can but dont want negative len !
     if v.rCap < bytes:
         expand(v, (bytes - v.rCap))
-    v.curpos += bytes
+    v[].curpos += bytes
 
 
 
 
 # reset the state, everything but don't lose allocation
 # after this call, all views are invalid !
-proc reset*(v: var StringView) =
-    v.lenpos = v.cap
-    v.curpos = v.cap
-    v.backup = 0
-    v.exportflag = false
-    v.views.setLen 0
+proc reset*(v: StringView) =
+    v[].lenpos = v[].cap
+    v[].curpos = v[].cap
+    v[].backup = 0
+    v[].exportflag = false
+    for view in v[].views:
+        when hasThreadSupport:
+            deallocShared(view)
+        else:
+            dealloc(view)
+    v[].views.setLen 0
+
+proc restart*(v: StringView) =
+    v[].lenpos = v[].cap
+    v[].curpos = v[].cap
+    v[].exportflag = false
+    v[].views.setLen 0
 
 proc newStringView*(cap: int = 256): StringView =
     assert cap >= 0
-    new result
     let realcap = cap * 2
-    when compileOption("threads"):
-        result.pbuf = cast[ptr Payload](allocShared(contentSize realcap))
+    when hasThreadSupport:
+        result = cast[StringView](allocShared(sizeof StringViewImpl))
+        result[].pbuf = cast[ptr Payload](allocShared(contentSize realcap))
     else:
-        result.pbuf = cast[ptr Payload](alloc(contentSize realcap))
+        result = cast[StringView](alloc(sizeof StringViewImpl))
+        result[].pbuf = cast[ptr Payload](alloc(contentSize realcap))
 
-    result.cap = cap
-    result.lenpos = cap
-    result.curpos = cap
-    result.backup = 0
-    result.exportflag = false
-    result.views = newSeqOfCap[View](cap = 200)
-
-
-
+    result[].cap = cap
+    result[].lenpos = cap
+    result[].curpos = cap
+    result[].backup = 0
+    result[].exportflag = false
+    result[].views = newSeqOfCap[View](cap = 200)
 
 
+
+# proc `[]`*(p: StringView): var StringViewImpl {.inline.} =
+#     ## Returns a mutable view of the internal value of `p`.
+#     checkNotNil(p)
+#     p[]
+
+# proc `[]=`*(p: StringView, val: sink Isolated[StringViewImpl]) {.inline, error: "`ConstPtr` cannot be assigned.".} =
+#     checkNotNil(p)
+#     p[] = extract val
+
+# template `[]=`*(p: StringView; val: StringViewImpl) =
+#     `[]=`(p, isolate(val))
+
+# template strictMove*(to: var StringView, fr: StringView) =
+#     echo "hi"
+#     `=destroy`(to)
+#     wasMoved(to)
+#     # cast[var StringView]((to)) = move cast[var StringView]((fr))
+#     var value = move cast[var StringView]((fr))
+#     to.val = value.val
+#     value.val = nil
+#     echo "22"
 
 

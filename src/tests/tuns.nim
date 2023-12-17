@@ -14,7 +14,7 @@ type MyAdapter* = ref object of Tunnel
 
 method init(self: MyAdapter, name: string){.base, raises: [], gcsafe.} =
     procCall init(Tunnel(self), name, hsize = 5)
-    self.rv = newStringView(cap = 2000)
+    self.readLine = newStringView(cap = 2000)
     self.receivedsig = invalid
 
 proc new*(t: typedesc[MyAdapter]): MyAdapter =
@@ -25,25 +25,23 @@ proc new*(t: typedesc[MyAdapter]): MyAdapter =
 
 method write*(self: MyAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     info "Adapter write to socket", adapter = self.name, data = $rp
-
-    self.wv = rp
+    self.writeLine = rp
     #wrote to socket
     await sleepAsync(2)
-    self.wrotestr = $self.wv
+    self.wrotestr = $self.writeLine
 
-    self.wv.reset()
+    self.writeLine.restart()
 
 
 
 method read*(self: MyAdapter, chain: Chains = default): Future[StringView] {.async.} =
     info "Adapter read from socket", adapter = self.name, data = self.wrotestr
-    let ret = newFuture[StringView]("read MyAdapter")
-    self.rv.reset()
+    self.readLine.restart()
 
     await sleepAsync(2)
-    self.rv.write(self.wrotestr)
+    self.readLine.write(self.wrotestr)
 
-    return self.rv
+    return self.readLine
 
 
 method signal*(self: MyAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
@@ -65,17 +63,17 @@ proc new*(t: typedesc[Nimche], name: string): Nimche =
     result.init(name = name)
 
 
-method write*(self: Nimche, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
-    writeChecks(self, data):
-        copyMem(self.writeBuffer.at, addr self.mark[0], self.hsize)
-        trace "Appended ", header = (string.fromBytes(makeOpenArray(self.writeBuffer.at, byte, self.hsize))), result = ($data), name = self.name
+method write*(self: Nimche, data:  StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
+    setWriteHeader(self, data):
+        copyMem(self.getWriteHeader, addr self.mark[0], self.hsize)
+        trace "Appended ", header = (string.fromBytes(makeOpenArray(self.getWriteHeader, byte, self.hsize))), to = ($self.writeLine), name = self.name
 
-    procCall write(Tunnel(self), data)
+    procCall write(Tunnel(self), self.writeLine)
 
 method read*(self: Nimche, chain: Chains = default): Future[StringView] {.async.} =
-    readChecks(self, await procCall read(Tunnel(self))):
-        trace "extracted ", header = string.fromBytes(makeOpenArray(self.readBuffer.at, byte, self.hsize)), result = $self.rv
-    return self.rv
+    setReadHeader(self, await procCall read(Tunnel(self)))
+    trace "extracted ", header = string.fromBytes(makeOpenArray(self.getReadHeader, byte, self.hsize)), result = $self.readLine
+    return self.readLine
 
 
 method signal*(self: Nimche, dir: SigDirection, sig: Signals, chain: Chains = default) =
@@ -84,11 +82,12 @@ method signal*(self: Nimche, dir: SigDirection, sig: Signals, chain: Chains = de
     procCall signal(Tunnel(self), dir, sig, chain)
 
 method requestInfo*(self: Nimche, target: Hash, dir: SigDirection, tag: InfoTag, chain: Chains = default): ref InfoBox {.gcsafe.} =
-    if self.isMe(target) and tag == rq_tag:
+    if isMe(self,target):echo "was me"
+    if isMe(self,target) and tag == rq_tag:
         info "Handling requestInfo", name = self.name, target = target, tag = tag
 
-        var info= new InfoBox
-        var sample{.global.} : uint16 = 0xffff
+        var info = new InfoBox
+        var sample{.global.}: uint16 = 0xffff
         info[] = (tag, 2, cast[pointer](addr sample))
         info
     else:
@@ -105,7 +104,7 @@ method requestInfo*(self: Nimche, target: Hash, dir: SigDirection, tag: InfoTag,
     #         if firstread : discard
     #         discard
 
-    #     trace "extracted ", header = string.fromBytes(makeOpenArray(self.readBuffer.at, byte, self.hsize)), result = $data
+    #     trace "extracted ", header = string.fromBytes(makeOpenArray(self.getWriteHeader, byte, self.hsize)), result = $data
 
     #     ret.complete data
     # return ret
@@ -146,6 +145,7 @@ suite "Suite for testing basic tunnel":
             nc1.chain(nc2).chain(nc3).chain(nc4).chain(MyAdapter.new())
 
             for i in 0..3:
+                echo "test"
                 var write_data = "hallo"
                 info "Data to send through tunnels", write_data
                 var writeview = newStringView(cap = 0)
@@ -201,9 +201,6 @@ suite "Suite for testing basic tunnel":
 
         waitFor run()
 
-
-
-
     test "Test basic signal":
         proc run() {.async.} =
             var nc1: Nimche = Nimche.new(name = "nc1")
@@ -228,45 +225,45 @@ suite "Suite for testing basic tunnel":
             var adapter = MyAdapter.new()
             nc1.chain(nc2).chain(nc3).chain(nc4).chain(adapter)
 
-           
-            for i in 0..3:
-                let v1:ref InfoBox = nc1.requestInfo("nc3",right, rq_tag)
-                check(v1.size == 2)
-                check(cast[ptr uint16](v1.value)[] == 0xffff)
-            for i in 0..3:
-                let v1:ref InfoBox = adapter.requestInfo("nc3",left, rq_tag)
-                check(v1.size == 2)
-                check(cast[ptr uint16](v1.value)[] == 0xffff)
-            for i in 0..3:
-                let v1:ref InfoBox = nc1.requestInfo("nc3",both, rq_tag)
-                check(v1.size == 2)
-                check(cast[ptr uint16](v1.value)[] == 0xffff)
-            for i in 0..3:
-                let v1:ref InfoBox = adapter.requestInfo("nc3",both, rq_tag)
-                check(v1.size == 2)
-                check(cast[ptr uint16](v1.value)[] == 0xffff)
-            for i in 0..3:
-                var v1:ref InfoBox 
-                v1 = adapter.requestInfo("nc31",both, rq_tag);check(v1 == nil)
-                v1 = nc1.requestInfo("nc31",both, rq_tag);check(v1 == nil)
-                v1 = nc4.requestInfo("nc31",both, rq_tag);check(v1 == nil)
-                v1 = nc3.requestInfo("nc31",both, rq_tag);check(v1 == nil)
 
-                v1 = adapter.requestInfo("nc31",both, InfoTag(0x1223));check(v1 == nil)
-                v1 = nc1.requestInfo("nc31",both, InfoTag(0x123e));check(v1 == nil)
-                v1 = nc4.requestInfo("nc31",both, InfoTag(0x123a));check(v1 == nil)
-                v1 = nc3.requestInfo("nc31",both, InfoTag(0x1234));check(v1 == nil)
-                
-                v1 = adapter.requestInfo("nc3",right, rq_tag);check(v1 == nil)
-                v1 = nc1.requestInfo("nc3",left, rq_tag);check(v1 == nil)
-                v1 = nc4.requestInfo("nc3",right, rq_tag);check(v1 == nil)
+            for i in 0..3:
+                let v1: ref InfoBox = nc1.requestInfo("nc3", right, rq_tag)
+                check(v1.size == 2)
+                check(cast[ptr uint16](v1.value)[] == 0xffff)
+            for i in 0..3:
+                let v1: ref InfoBox = adapter.requestInfo("nc3", left, rq_tag)
+                check(v1.size == 2)
+                check(cast[ptr uint16](v1.value)[] == 0xffff)
+            for i in 0..3:
+                let v1: ref InfoBox = nc1.requestInfo("nc3", both, rq_tag)
+                check(v1.size == 2)
+                check(cast[ptr uint16](v1.value)[] == 0xffff)
+            for i in 0..3:
+                let v1: ref InfoBox = adapter.requestInfo("nc3", both, rq_tag)
+                check(v1.size == 2)
+                check(cast[ptr uint16](v1.value)[] == 0xffff)
+            for i in 0..3:
+                var v1: ref InfoBox
+                v1 = adapter.requestInfo("nc31", both, rq_tag); check(v1 == nil)
+                v1 = nc1.requestInfo("nc31", both, rq_tag); check(v1 == nil)
+                v1 = nc4.requestInfo("nc31", both, rq_tag); check(v1 == nil)
+                v1 = nc3.requestInfo("nc31", both, rq_tag); check(v1 == nil)
 
-                v1 = nc3.requestInfo("nc1",both, rq_tag);check(v1 != nil)
-                v1 = nc3.requestInfo("nc4",both, rq_tag);check(v1 != nil)
-                v1 = nc3.requestInfo("nc5",both, rq_tag);check(v1 == nil)
-                
+                v1 = adapter.requestInfo("nc31", both, InfoTag(0x1223)); check(v1 == nil)
+                v1 = nc1.requestInfo("nc31", both, InfoTag(0x123e)); check(v1 == nil)
+                v1 = nc4.requestInfo("nc31", both, InfoTag(0x123a)); check(v1 == nil)
+                v1 = nc3.requestInfo("nc31", both, InfoTag(0x1234)); check(v1 == nil)
 
-            
+                v1 = adapter.requestInfo("nc3", right, rq_tag); check(v1 == nil)
+                v1 = nc1.requestInfo("nc3", left, rq_tag); check(v1 == nil)
+                v1 = nc4.requestInfo("nc3", right, rq_tag); check(v1 == nil)
+
+                v1 = nc3.requestInfo("nc1", both, rq_tag); check(v1 != nil)
+                v1 = nc3.requestInfo("nc4", both, rq_tag); check(v1 != nil)
+                v1 = nc3.requestInfo("nc5", both, rq_tag); check(v1 == nil)
+
+
+
             # for i in 0..3:
             #     let v1:ref InfoBox = nc3.requestInfo("nc3",both, rq_tag)
             #     check(v1.size == 2)

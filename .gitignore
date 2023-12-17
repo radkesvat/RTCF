@@ -9,6 +9,7 @@ node_modules
 /libs/libnet.a
 /libs/libpcap.a
 /dist
+/docs/internal
 
 #sad it uses raw paths
 src/generated/
