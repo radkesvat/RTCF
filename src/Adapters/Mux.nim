@@ -35,6 +35,7 @@ type
         acceptIncomeFuture: Future[void]
         handles: seq[Future[void]]
         store: Store
+        masterChannel:Chan
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -42,9 +43,22 @@ var globalTable: ptr UncheckedArray[DualChan]
 var tableCounter: Atomic[uint16]
 
 
-method init(self: MuxAdapetr, name: string, store: Store,){.base, raises: [], gcsafe.} =
-
+method init(self: MuxAdapetr, name: string,master:Chan, store: Store, loc: Location): MuxAdapetr{.base, raises: [], gcsafe.} =
+    new result
+    result.dataAvailable = newAsyncEvent()
+    result.loc = loc
+    result.store = store
+    result.masterChannel = master
     procCall init(Adapter(self), name, hsize = 0)
+
+    if self.getNext != nil:
+        doAssert self.getPrev == nil , "Adapters rule broken, the chain is not finished."
+        self.side = left
+    else:
+        self.side = right
+
+        
+
 
 # proc new*(t: typedesc[MuxAdapetr], loc: Location): MuxAdapetr =
 #     trace "new MuxAdapetr"
@@ -80,11 +94,13 @@ method init(self: MuxAdapetr, name: string, store: Store,){.base, raises: [], gc
 
 
 proc staticInit() =
+    logScope:
+        topic = "Global"
     tableCounter.store(0)
     var total_size = sizeof(typeof(globalTable[][0])) * GlobalTableSize
     globalTable = cast[typeof globalTable](allocShared(total_size))
     trace "Allocate globalTable", size = total_size
-    static: doAssert sizeof(typeof(globalTable[][0])) <= 16, "what the fuck are you doing ?"
+    static: doAssert sizeof(typeof(globalTable[][0])) <= 16, "roye google chromo sefid nakon plz !"
     trace "Initialized"
 
 staticInit()

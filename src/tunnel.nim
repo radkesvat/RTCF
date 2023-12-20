@@ -40,7 +40,7 @@ type
         writeLine*: StringView
         readHeaderBuf: View
         writeHeaderBuf: View
-        stopped*:bool
+        stopped*: bool
 
     #raised when a tunnel dose not satisfy to continue the process
     FlowError = object of CatchableError
@@ -170,7 +170,7 @@ proc findByType*(self: Tunnel, target: typedesc, dir: SigDirection, tag: InfoTag
                 res = self.ties[chain].prev.findByType(target, left, tag, chain)
             res
 
-#very general ! you may use direct functions 
+#very general ! you may use direct functions
 method requestInfo*(self: Tunnel, targethash: Hash, dir: SigDirection, tag: InfoTag, chain: Chains = default): ref InfoBox {.base, gcsafe.} =
     var target = self.findByName(targethash, dir, chain)
     if target == nil: return nil
@@ -223,6 +223,9 @@ proc chain*(`from`: Tunnel, `to`: Tunnel, chainfrom: Chains = default, chainto: 
 # proc init*(t: Tunnel,tag:TunnelTag = TunnelTag.None, name = "unnamed tunenl") =
 #     t.tag = tag
 #     t.name = name
+
+proc getNext*(self: Tunnel, chain: Chains = default): Tunnel {.inline, gcsafe.} = self.ties[chain].next
+proc getPrev*(self: Tunnel, chain: Chains = default): Tunnel {.inline, gcsafe.} = self.ties[chain].prev
 
 
 method write*(self: Tunnel, data: StringView, chain: Chains = default): Future[void] {.base, gcsafe.} =

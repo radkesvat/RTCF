@@ -1,1 +1,3 @@
-import adapters/Mux , store
+import adapters/mux,store
+
+echo "hi"

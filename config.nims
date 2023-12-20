@@ -147,11 +147,14 @@ template sharedBuildSwitches(){.dirty.} =
     # switch("mm", "orc") not for chronos
     switch("mm", gc)
     switch("cc", compiler)
-    switch("threads", "off")
+    switch("threads", "on")
     # switch("exceptions", "setjmp")
     switch("warning", "HoleEnumConv:off")
     switch("warning", "BareExcept:off")
-    # switch("d", "useMalloc")
+    
+    #untill Araq fixes it in devel https://github.com/nim-lang/Nim/pull/23100
+    switch("d", "useMalloc")
+
     switch("d", "asyncBackend:chronos")
 
     switch("path", src_dir)

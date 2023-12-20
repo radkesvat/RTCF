@@ -14,7 +14,8 @@ type MyAdapter* = ref object of Adapter
 
 method init(self: MyAdapter, name: string){.base, raises: [], gcsafe.} =
     procCall init(Adapter(self), name, hsize = 5)
-    self.readLine = newStringView(cap = 2000)
+    self.readLine =  newStringView(cap = 2000)
+
     self.receivedsig = invalid
 
 proc new*(t: typedesc[MyAdapter]): MyAdapter =

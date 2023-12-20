@@ -18,7 +18,7 @@ import stew/byteutils, math, ptrops, sequtils
 import threading/atomics, std/isolation
 export ptrops, isolation
 
-const log_hooks {.booldefine.} = false
+const log_hooks {.booldefine.} = true
 const ncstr = defined(nimSeqsV2) #yard said don't do that :(
 const setStrLitFlag = ncstr #god help us on that
 const strlitFlag = 1 shl (sizeof(int)*8 - 2)
@@ -104,6 +104,13 @@ proc safeAfterExport(v: StringView) =
 proc `=destroy`*(x: StringViewImpl) =
     when log_hooks: echo "=destroy StringViewImpl"
     if x.pbuf != nil:
+        for view in x.views:
+            when hasThreadSupport:
+                deallocShared(view)
+            else:
+                dealloc(view)
+    
+        `=destroy`(x.views)
         when hasThreadSupport:
             deallocShared(x.pbuf)
         else:
@@ -128,9 +135,9 @@ proc `=copy`*(a: var StringViewImpl; b: StringViewImpl) {.error: "not for me!".}
     if b.pbuf != nil:
         let realcap = a.cap * 2
         when hasThreadSupport:
-            a.pbuf = cast[typeof(a.pbuf)](allocShared((contentSize realcap)))
+            a.pbuf = cast[typeof(a.pbuf)](allocShared0((contentSize realcap)))
         else:
-            a.pbuf = cast[typeof(a.pbuf)](alloc((contentSize realcap)))
+            a.pbuf = cast[typeof(a.pbuf)](alloc0((contentSize realcap)))
 
         copyMem(addr a.pbuf.data[0], addr b.pbuf.data[0], a.cap *2 + 1)
 
@@ -149,9 +156,9 @@ proc `=dup`*(a: StringViewImpl): StringViewImpl {.nodestroy, error: "not for me!
     if b.pbuf != nil:
         let realcap = a.cap * 2
         when hasThreadSupport:
-            a.pbuf = cast[typeof(a.pbuf)](allocShared((contentSize realcap)))
+            a.pbuf = cast[typeof(a.pbuf)](allocShared0((contentSize realcap)))
         else:
-            a.pbuf = cast[typeof(a.pbuf)](alloc((contentSize realcap)))
+            a.pbuf = cast[typeof(a.pbuf)](alloc0((contentSize realcap)))
 
         copyMem(addr a.pbuf.data[0], addr b.pbuf.data[0], a.cap *2 + 1)
 
@@ -327,6 +334,14 @@ proc reset*(v: StringView) =
             dealloc(view)
     v[].views.setLen 0
 
+proc destroy*(v: var StringView) =
+    reset v
+    when hasThreadSupport:
+        deallocShared v
+    else: 
+        dealloc v
+    v = nil
+
 proc restart*(v: StringView) =
     v[].lenpos = v[].cap
     v[].curpos = v[].cap
@@ -336,13 +351,14 @@ proc restart*(v: StringView) =
 proc newStringView*(cap: int = 256): StringView =
     assert cap >= 0
     let realcap = cap * 2
+
+
     when hasThreadSupport:
-        result = cast[StringView](allocShared(sizeof StringViewImpl))
+        result = cast[StringView](allocShared0(sizeof StringViewImpl))
         result[].pbuf = cast[ptr Payload](allocShared(contentSize realcap))
     else:
-        result = cast[StringView](alloc(sizeof StringViewImpl))
+        result = cast[StringView](alloc0(sizeof StringViewImpl))
         result[].pbuf = cast[ptr Payload](alloc(contentSize realcap))
-
     result[].cap = cap
     result[].lenpos = cap
     result[].curpos = cap
