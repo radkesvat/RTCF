@@ -8,12 +8,12 @@ logScope:
 const rq_tag: InfoTag = InfoTag(0x123)
 
 
-type MyAdapter* = ref object of Tunnel
+type MyAdapter* = ref object of Adapter
     wrotestr: string
     receivedsig: Signals
 
 method init(self: MyAdapter, name: string){.base, raises: [], gcsafe.} =
-    procCall init(Tunnel(self), name, hsize = 5)
+    procCall init(Adapter(self), name, hsize = 5)
     self.readLine = newStringView(cap = 2000)
     self.receivedsig = invalid
 

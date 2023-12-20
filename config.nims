@@ -173,7 +173,7 @@ template sharedBuildSwitches(){.dirty.} =
     switch("d", "chronicles_colors=AnsiColors")
     switch("d", "chronicles_disable_thread_id")
     switch("d", "chronicles_timestamps=none")
-    switch("import", src_dir/"log.nim")
+    switch("import", src_dir/"helpers.nim")
 
 
 

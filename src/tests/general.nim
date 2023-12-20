@@ -1,7 +1,7 @@
 import pretty,sugar,rope,strutils,chronos
 import stew/byteutils,threading/channels
 import chronos/threadsync,cpuinfo
-
+import moduel
 
 #returns logical cores which each ``can`` run a thread
 let numProcs = countProcessors() 

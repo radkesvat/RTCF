@@ -40,6 +40,7 @@ type
         writeLine*: StringView
         readHeaderBuf: View
         writeHeaderBuf: View
+        stopped*:bool
 
     #raised when a tunnel dose not satisfy to continue the process
     FlowError = object of CatchableError
@@ -242,8 +243,8 @@ method read*(self: Tunnel, chain: Chains = default): Future[StringView] {.base g
 
 
 
-# type Adapter* = ref object of Tunnel
-#     discard
+type Adapter* = ref object of Tunnel
+    discard
 
 # method write*(self: Adapter, data: Rope): Future[void] =
 #     quit "Implenet Adapter write"
