@@ -38,8 +38,8 @@ type
         hsize: int
         readLine*: StringView
         writeLine*: StringView
-        readHeaderBuf: View
-        writeHeaderBuf: View
+        readHeaderBuf: ptr UncheckedArray[byte]
+        writeHeaderBuf: ptr UncheckedArray[byte]
         stopped*: bool
 
     #raised when a tunnel dose not satisfy to continue the process
@@ -57,8 +57,8 @@ proc `$`*(x: InfoTag): string {.borrow.}
 template name*(self: Tunnel): string = self.name
 template hsize*(self: Tunnel): int = self.hsize
 
-template getReadHeader*(self: Tunnel): ptr UncheckedArray[char] = self.readHeaderBuf.at
-template getWriteHeader*(self: Tunnel): ptr UncheckedArray[char] = self.writeHeaderBuf.at
+template getReadHeader*(self: Tunnel): ptr UncheckedArray[byte] = self.readHeaderBuf
+template getWriteHeader*(self: Tunnel): ptr UncheckedArray[byte] = self.writeHeaderBuf
 
 
 method init*(self: Tunnel, name: string, hsize: static[int]){.base, gcsafe.} =
@@ -85,7 +85,7 @@ template setWriteHeader*(self: Tunnel, sv: StringView, body: untyped) =
     let new_stringview = sv; assert new_stringview != nil
     if self.writeLine != new_stringview:
         new_stringview.shiftl(self.hsize)
-        self.writeHeaderBuf = new_stringview.view(self.hsize)
+        self.writeHeaderBuf = new_stringview.buf()
         new_stringview.shiftr(self.hsize)
         self.writeLine = new_stringview
     block:
@@ -99,7 +99,7 @@ proc setReadHeader*(self: Tunnel, sv: StringView) {.gcsafe, raises: [FlowReadErr
         if new_stringview.len < self.hsize:
             error "stream finished before full header was read.", tunnel = self.name, hsize = self.hsize
             raise InsufficientBytse(msg: "stream finished before full header was read.", tunnel: self)
-        self.readHeaderBuf = new_stringview.view(self.hsize)
+        self.readHeaderBuf = new_stringview.buf()
         self.readLine = new_stringview
 
     self.readLine.shiftr(self.hsize)
@@ -246,9 +246,16 @@ method read*(self: Tunnel, chain: Chains = default): Future[StringView] {.base g
 
 
 
-type Adapter* = ref object of Tunnel
-    discard
+type 
+    Location* = enum
+        BeforeGfw, AfterGfw
+        
+    Side* {.pure.} = enum
+        Left, Right
 
+    Adapter* = ref object of Tunnel
+        location*: Location
+        side*: Side
 # method write*(self: Adapter, data: Rope): Future[void] =
 #     quit "Implenet Adapter write"
 

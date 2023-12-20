@@ -42,13 +42,13 @@ type
         pbuf: ptr Payload # buffer pointer
         backup: int       #low level, to prevent a copy
         exportflag: bool
-        views: seq[View]
+        # views: seq[View]
 
     StringView* = ptr StringViewImpl
 
-    View* = ptr object
-        at*: ptr UncheckedArray[char]
-        offset: int
+    # View* = ptr object
+    #     at*: ptr UncheckedArray[char]
+    #     offset: int
 
 
 when ncstr:
@@ -85,8 +85,8 @@ proc `low`*(v: StringView): int = 0
 
 
 # this is the buffer, you can use for reading or writing to it
-template buf*(v: StringView): ptr UncheckedArray[char] =
-    cast[ptr UncheckedArray[char]](addr (v[].pbuf.data[v[].curpos]))
+template buf*(v: StringView): ptr UncheckedArray[byte] =
+    cast[ptr UncheckedArray[byte]](addr (v[].pbuf.data[v[].curpos]))
 
 
 
@@ -104,13 +104,13 @@ proc safeAfterExport(v: StringView) =
 proc `=destroy`*(x: StringViewImpl) =
     when log_hooks: echo "=destroy StringViewImpl"
     if x.pbuf != nil:
-        for view in x.views:
-            when hasThreadSupport:
-                deallocShared(view)
-            else:
-                dealloc(view)
+        # for view in x.views:
+        #     when hasThreadSupport:
+        #         deallocShared(view)
+        #     else:
+        #         dealloc(view)
     
-        `=destroy`(x.views)
+        # `=destroy`(x.views)
         when hasThreadSupport:
             deallocShared(x.pbuf)
         else:
@@ -130,7 +130,7 @@ proc `=copy`*(a: var StringViewImpl; b: StringViewImpl) {.error: "not for me!".}
     a.cap = b.cap
     a.backup = b.backup
     a.exportflag = b.exportflag
-    a.views = b.views
+    # a.views = b.views
 
     if b.pbuf != nil:
         let realcap = a.cap * 2
@@ -151,7 +151,7 @@ proc `=dup`*(a: StringViewImpl): StringViewImpl {.nodestroy, error: "not for me!
     a.cap = b.cap
     a.backup = b.backup
     a.exportflag = b.exportflag
-    a.views = b.views
+    # a.views = b.views
 
     if b.pbuf != nil:
         let realcap = a.cap * 2
@@ -174,10 +174,10 @@ proc `=sink`*(a: var StringViewImpl; b: StringViewImpl) =
     a.pbuf = b.pbuf
     a.backup = b.backup
     a.exportflag = b.exportflag
-    var v {.cursor.} = b.views
-    a.views = move(v)
-    wasMoved(v)
-    assert b.views.len == 0
+    # var v {.cursor.} = b.views
+    # a.views = move(v)
+    # wasMoved(v)
+    # assert b.views.len == 0
 
     # var size = b.views.len() * 2
     # a.views = newSeqOfCap[ptr View](cap = size)
@@ -235,7 +235,7 @@ template bytes*(v: StringView; name: untyped; code: untyped) =
 
 
 proc cstring*(v: StringView): cstring =
-    v.buf[v.len] = 0.char
+    v.buf[v.len] = 0.byte
     return cast[cstring](v.buf)
 
 
@@ -256,9 +256,9 @@ proc expand(v: StringView; increase: int) =
     v[].curpos += dif
     v[].lenpos += dif
     # info "positions", cur =  v.curpos
-    for track in v[].views:
-        track.offset = dif+track.offset
-        track.at = cast[ptr UncheckedArray[char]](addr v[].pbuf.data[track.offset])
+    # for track in v[].views:
+    #     track.offset = dif+track.offset
+    #     track.at = cast[ptr UncheckedArray[char]](addr v[].pbuf.data[track.offset])
     v[].pbuf.data[newcap] = 0.char
 
 
@@ -290,19 +290,19 @@ proc setLen*(v: StringView; ln: int) =
     v[].lenpos = v[].curpos + ln
 
 # most efficent way of reading/writing fixed size data
-proc view*(v: StringView; bytes: int): View =
-    assert bytes != 0
-    assert v[].curpos + bytes <= v[].cap * 2, "cap = " & $(v[].cap*2) & "cur = " & $v[].curpos
-    when hasThreadSupport:
-        result = cast[View](allocShared(sizeof View))
-    else:
-        result = cast[View](alloc(sizeof View))
+# proc view*(v: StringView; bytes: int): View =
+#     assert bytes != 0
+#     assert v[].curpos + bytes <= v[].cap * 2, "cap = " & $(v[].cap*2) & "cur = " & $v[].curpos
+#     when hasThreadSupport:
+#         result = cast[View](allocShared(sizeof View))
+#     else:
+#         result = cast[View](alloc(sizeof View))
 
-    result.offset = v[].curpos
-    result.at = cast[ptr UncheckedArray[char]](addr v[].pbuf.data[v[].curpos])
-    v[].views.add result
+#     result.offset = v[].curpos
+#     result.at = cast[ptr UncheckedArray[char]](addr v[].pbuf.data[v[].curpos])
+#     v[].views.add result
 
-proc isValid*(strv: StringView; v: View): bool = strv[].views.contains v
+# proc isValid*(strv: StringView; v: View): bool = strv[].views.contains v
 
 
 proc shiftl*(v: StringView; bytes: int) =
@@ -327,12 +327,12 @@ proc reset*(v: StringView) =
     v[].curpos = v[].cap
     v[].backup = 0
     v[].exportflag = false
-    for view in v[].views:
-        when hasThreadSupport:
-            deallocShared(view)
-        else:
-            dealloc(view)
-    v[].views.setLen 0
+    # for view in v[].views:
+    #     when hasThreadSupport:
+    #         deallocShared(view)
+    #     else:
+    #         dealloc(view)
+    # v[].views.setLen 0
 
 proc destroy*(v: var StringView) =
     reset v
@@ -346,7 +346,7 @@ proc restart*(v: StringView) =
     v[].lenpos = v[].cap
     v[].curpos = v[].cap
     v[].exportflag = false
-    v[].views.setLen 0
+    # v[].views.setLen 0
 
 proc newStringView*(cap: int = 256): StringView =
     assert cap >= 0
@@ -364,7 +364,7 @@ proc newStringView*(cap: int = 256): StringView =
     result[].curpos = cap
     result[].backup = 0
     result[].exportflag = false
-    result[].views = newSeqOfCap[View](cap = 200)
+    # result[].views = newSeqOfCap[View](cap = 200)
 
 
 
