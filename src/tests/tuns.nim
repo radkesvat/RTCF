@@ -14,7 +14,7 @@ type MyAdapter* = ref object of Adapter
 
 method init(self: MyAdapter, name: string){.base, raises: [], gcsafe.} =
     procCall init(Adapter(self), name, hsize = 5)
-    self.readLine =  newStringView(cap = 2000)
+    self.readLine = newStringView(cap = 2000)
 
     self.receivedsig = invalid
 
@@ -35,7 +35,7 @@ method write*(self: MyAdapter, rp: StringView, chain: Chains = default): Future[
 
 
 
-method read*(self: MyAdapter, chain: Chains = default): Future[StringView] {.async.} =
+method read*(self: MyAdapter, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     info "Adapter read from socket", adapter = self.name, data = self.wrotestr
     self.readLine.restart()
 
@@ -64,15 +64,15 @@ proc new*(t: typedesc[Nimche], name: string): Nimche =
     result.init(name = name)
 
 
-method write*(self: Nimche, data:  StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
+method write*(self: Nimche, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
     setWriteHeader(self, data):
         copyMem(self.getWriteHeader, addr self.mark[0], self.hsize)
         trace "Appended ", header = (string.fromBytes(makeOpenArray(self.getWriteHeader, byte, self.hsize))), to = ($self.writeLine), name = self.name
 
     procCall write(Tunnel(self), self.writeLine)
 
-method read*(self: Nimche, chain: Chains = default): Future[StringView] {.async.} =
-    setReadHeader(self, await procCall read(Tunnel(self)))
+method read*(self: Nimche, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
+    setReadHeader(self, await procCall read(Tunnel(self), bytes+self.hsize))
     trace "extracted ", header = string.fromBytes(makeOpenArray(self.getReadHeader, byte, self.hsize)), result = $self.readLine
     return self.readLine
 
@@ -83,8 +83,8 @@ method signal*(self: Nimche, dir: SigDirection, sig: Signals, chain: Chains = de
     procCall signal(Tunnel(self), dir, sig, chain)
 
 method requestInfo*(self: Nimche, target: Hash, dir: SigDirection, tag: InfoTag, chain: Chains = default): ref InfoBox {.gcsafe.} =
-    if isMe(self,target):echo "was me"
-    if isMe(self,target) and tag == rq_tag:
+    if isMe(self, target): echo "was me"
+    if isMe(self, target) and tag == rq_tag:
         info "Handling requestInfo", name = self.name, target = target, tag = tag
 
         var info = new InfoBox
@@ -132,7 +132,7 @@ suite "Suite for testing basic tunnel":
             writeview.write(write_data)
             info "View to send through tunnels", writeview
             await nc1.write(writeview)
-            let read = $(await nc1.read())
+            let read = $(await nc1.read(0))
             # print read
             check(read == write_data)
         waitFor run()
@@ -153,7 +153,7 @@ suite "Suite for testing basic tunnel":
                 writeview.write(write_data)
                 info "View to send through tunnels", writeview
                 await nc1.write(writeview)
-                let read = $(await nc1.read())
+                let read = $(await nc1.read(0))
                 # print read
                 check(read == write_data)
 
@@ -175,7 +175,7 @@ suite "Suite for testing basic tunnel":
                 writeview.write(write_data)
                 info "View to send through tunnels", writeview
                 await nc1.write(writeview)
-                let read = $(await nc1.read())
+                let read = $(await nc1.read(0))
                 # print read
                 check(read == write_data)
         waitFor run()
@@ -197,8 +197,8 @@ suite "Suite for testing basic tunnel":
 
             await nc4.write(writeview)
             for i in 0..10:
-                expect(FlowReadError):
-                    let read = $(await nc1.read())
+                expect(InsufficientBytse):
+                    let read = $(await nc1.read(0))
 
         waitFor run()
 

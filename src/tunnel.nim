@@ -1,6 +1,6 @@
-import rope, stew/byteutils, stringview, chronos, hashes, pretty
+import  stew/byteutils, stringview, chronos, hashes
 
-export rope, byteutils, stringview, chronos, hashes
+export byteutils, stringview, chronos, hashes
 
 logScope:
     topic = "Tunnel"
@@ -43,8 +43,8 @@ type
         stopped*: bool
 
     #raised when a tunnel dose not satisfy to continue the process
-    FlowError = object of CatchableError
-        tunnel: Tunnel
+    FlowError* = object of CatchableError
+        tunnel*: Tunnel
     FlowReadError* = ref object of FlowError
     InsufficientBytse* = ref object of FlowReadError
 
@@ -93,7 +93,7 @@ template setWriteHeader*(self: Tunnel, sv: StringView, body: untyped) =
     writeHeaderFinish(self)
 
 
-proc setReadHeader*(self: Tunnel, sv: StringView) {.gcsafe, raises: [FlowReadError].} =
+proc setReadHeader*(self: Tunnel, sv: StringView) {.gcsafe, raises: [InsufficientBytse].} =
     let new_stringview = sv; assert new_stringview != nil
     if self.readLine != new_stringview:
         if new_stringview.len < self.hsize:
@@ -236,34 +236,34 @@ method write*(self: Tunnel, data: StringView, chain: Chains = default): Future[v
 
 
 
-method read*(self: Tunnel, chain: Chains = default): Future[StringView] {.base gcsafe.} =
+method read*(self: Tunnel, bytes: int, chain: Chains = default): Future[StringView] {.base gcsafe.} =
     # return self.next.read()
     var next = self.ties[chain].next
     assert not next.isNil
     resetReadState self
-    return next.read()
+    return next.read(bytes, chain)
 
 
 
 
-type 
+type
     Location* = enum
         BeforeGfw, AfterGfw
-        
+
     Side* {.pure.} = enum
         Left, Right
 
     Adapter* = ref object of Tunnel
         location*: Location
         side*: Side
-# method write*(self: Adapter, data: Rope): Future[void] =
-#     quit "Implenet Adapter write"
+ # method write*(self: Adapter, data: Rope): Future[void] =
+ #     quit "Implenet Adapter write"
 
-# method read*(self: Adapter): Future[StringView] =
-#     quit "Implenet Adapter read"
+ # method read*(self: Adapter): Future[StringView] =
+ #     quit "Implenet Adapter read"
 
-# method connect*(self: Adapter) =
-#     quit "Implenet Adapter connect"
+ # method connect*(self: Adapter) =
+ #     quit "Implenet Adapter connect"
 
-# method disconnect*(self: Adapter): Rope =
-#     quit "Implenet Adapter read"
+ # method disconnect*(self: Adapter): Rope =
+ #     quit "Implenet Adapter read"

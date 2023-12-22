@@ -109,7 +109,7 @@ proc `=destroy`*(x: StringViewImpl) =
         #         deallocShared(view)
         #     else:
         #         dealloc(view)
-    
+
         # `=destroy`(x.views)
         when hasThreadSupport:
             deallocShared(x.pbuf)
@@ -272,6 +272,9 @@ proc write*(v: StringView; d: openArray[byte|char]) =
     copyMem(v.buf(), addr d[0], d.len)
     v[].lenpos = v[].curpos + d.len
 
+proc write*(v: StringView; d:SomeInteger) =
+    v.write((cast[ptr UncheckedArray[byte]](addr d)).toOpenArray(0, sizeof(typeof d)))
+
 # bad idea but we try to move your string
 proc write*(v: StringView; d: sink string) =
     v.write(d.toOpenArrayByte(d.low, d.high))
@@ -338,7 +341,7 @@ proc destroy*(v: var StringView) =
     reset v
     when hasThreadSupport:
         deallocShared v
-    else: 
+    else:
         dealloc v
     v = nil
 
