@@ -31,7 +31,6 @@ type
     MuxAdapetr* = ref object of Adapter
         acceptConnectionFut: Future[void]
         readloopFut: Future[void]
-        createConCb: proc(cid: Cid): void {.raises: [], gcsafe.}
         selectedCon: tuple[cid: Cid, dcp: DualChanPtr]
         buffered: seq[StringView]
         handles: seq[Future[void]]
@@ -43,8 +42,6 @@ const
     CidHeaderLen = 2
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
-
-
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -101,9 +98,18 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             else:
                 case whenNotFound:
                     of create:
-                        self.createConCb(cid)
-                        doAssert globalTableHas cid
-                        await globalTable[cid].second.send data
+                        self.masterChannel.sendSync cid
+                        # 1 or 2 time moving to event loop must be much faster than waiting and also enough
+                        await sleepAsync(1)
+                        # await sleepAsync(1)
+                        for i in 0 .. 100:
+                            if globalTableHas cid:
+                                await globalTable[cid].second.send data
+                                return
+                            await sleepAsync(20)
+                        # This  never happen, so quit if that actually happend to catch bug
+                        quit("The other thread did not handle a connection after 2 seconds of waiting !")
+
                     of sendclose:
                         data.shiftl sizeof(size)
                         data.write(typeof(size)(0))
@@ -187,7 +193,7 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
                     rp.write(rp.len.uint16)
                     rp.shiftl CidHeaderLen
                     rp.write(self.selectedCon.cid)
-                    safeCancel: await self.selectedCon.dcp.first.send(rp)
+                    await self.selectedCon.dcp.first.send(rp)
 
                 of Side.Right:
                     doAssert false, "this will not happen"
@@ -203,50 +209,43 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
                     rp.write(rp.len.uint16)
                     rp.shiftl CidHeaderLen
                     rp.write(self.selectedCon.cid)
-                    safeCancel: await self.selectedCon.dcp.first.send(rp)
+                    await self.selectedCon.dcp.first.send(rp)
 
 
 
 method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     info "read", adaptername = self.name
-    safeCancel:
-        case self.location:
-            of BeforeGfw:
-                case self.side:
-                    of Side.Left:
-                        var size: uint16 = 0
-                        var cid: uint16 = 0
-                        var sv = await self.selectedCon.dcp.second.recv()
-                        copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
-                        copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        assert self.selectedCon.cid == cid # ofcourse!
-                        assert size.int == sv.len # full packet must be received here
-                        assert size > 0
-                        return sv
-
-                    of Side.Right:
-                        doAssert false, "this will not happen"
-
-            of AfterGfw:
-                case self.side:
-                    of Side.Left:
-                        doAssert false, "this will not happen"
-
-                    of Side.Right:
-                        var size: uint16 = 0
-                        var cid: uint16 = 0
-                        var sv = await self.selectedCon.dcp.second.recv()
-                        copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
-                        copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        assert self.selectedCon.cid == cid # ofcourse!
-                        assert size.int == sv.len # full packet must be received here
-                        assert size > 0
-                        return sv
-
-
+    case self.location:
+        of BeforeGfw:
+            case self.side:
+                of Side.Left:
+                    var size: uint16 = 0
+                    var cid: uint16 = 0
+                    var sv = await self.selectedCon.dcp.second.recv()
+                    copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
+                    copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
+                    assert self.selectedCon.cid == cid # ofcourse!
+                    assert size.int == sv.len # full packet must be received here
+                    assert size > 0
+                    return sv
+                of Side.Right:
+                    doAssert false, "this will not happen"
+        of AfterGfw:
+            case self.side:
+                of Side.Left:
+                    doAssert false, "this will not happen"
+                of Side.Right:
+                    var size: uint16 = 0
+                    var cid: uint16 = 0
+                    var sv = await self.selectedCon.dcp.second.recv()
+                    copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
+                    copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
+                    assert self.selectedCon.cid == cid # ofcourse!
+                    assert size.int == sv.len # full packet must be received here
+                    assert size > 0
+                    return sv
 
 method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains = default) =
-    trace "received signal", name = self.name, sig = sig
     if sig == close or sig == stop: self.stopped = true
     procCall signal(Tunnel(self), dir, sig, chain)
 

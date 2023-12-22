@@ -1,4 +1,4 @@
-import  stew/byteutils, stringview, chronos, hashes
+import stew/byteutils, stringview, chronos, hashes
 
 export byteutils, stringview, chronos, hashes
 
@@ -128,51 +128,51 @@ method signal*(self: Tunnel, dir: SigDirection, sig: Signals, chain: Chains = de
 template isMe*(self: Tunnel, target: string or Hash): bool =
     when target is string: self.hash == hash(target) else: self.hash == target
 
-proc findByName*(self: Tunnel, target: string or Hash, dir: SigDirection, chain: Chains = default): Tunnel =
+proc findByName*(self: Tunnel, target: string or Hash, dir: SigDirection, chain: Chains = default): tuple[t: Tunnel, s: SigDirection] =
     var target = when target is string: hash(target) else: target
     template `is`(self: Tunnel, hash: Hash): bool = self.hash == hash
 
-    if self is target: return self
+    if self is target: return (self, dir)
     case dir:
         of left:
             if self.ties[chain].prev != nil:
                 self.ties[chain].prev.findByName(target, dir, chain)
-            else: nil
+            else: (nil, left)
         of right:
             if self.ties[chain].next != nil:
                 self.ties[chain].next.findByName(target, dir, chain)
-            else: nil
+            else: (nil, right)
         of both:
-            var res: Tunnel = nil
+            var res: tuple[t: Tunnel, s: SigDirection]
             if self.ties[chain].next != nil:
                 res = self.ties[chain].next.findByName(target, right, chain)
-            if res == nil and self.ties[chain].prev != nil:
+            if res.t == nil and self.ties[chain].prev != nil:
                 res = self.ties[chain].prev.findByName(target, left, chain)
             res
 
-proc findByType*(self: Tunnel, target: typedesc, dir: SigDirection, tag: InfoTag, chain: Chains = default): Tunnel =
+proc findByType*(self: Tunnel, target: typedesc, dir: SigDirection, chain: Chains = default): tuple[t: Tunnel, s: SigDirection] =
     case dir:
         of left:
             if self.ties[chain].prev != nil:
-                if self.ties[chain].prev is target: return self.ties[chain].prev
-                else: self.ties[chain].prev.findByType(target, dir, tag, chain)
-            else: nil
+                if self.ties[chain].prev is target: return (self.ties[chain].prev, left)
+                else: self.ties[chain].prev.findByType(target, dir, chain)
+            else: (nil, left)
         of right:
             if self.ties[chain].next != nil:
-                if self.ties[chain].next is target: return self.ties[chain].next
-                else: self.ties[chain].next.findByType(target, dir, tag, chain)
-            else: nil
+                if self.ties[chain].next is target: return (self.ties[chain].next, right)
+                else: self.ties[chain].next.findByType(target, dir, chain)
+            else: (nil, right)
         of both:
-            var res: Tunnel = nil
+            var res: tuple[t: Tunnel, s: SigDirection]
             if self.ties[chain].next != nil:
-                res = self.ties[chain].next.findByType(target, right, tag, chain)
-            if res == nil and self.ties[chain].prev != nil:
-                res = self.ties[chain].prev.findByType(target, left, tag, chain)
+                res = self.ties[chain].next.findByType(target, right, chain)
+            if res.t == nil and self.ties[chain].prev != nil:
+                res = self.ties[chain].prev.findByType(target, left, chain)
             res
 
 #very general ! you may use direct functions
 method requestInfo*(self: Tunnel, targethash: Hash, dir: SigDirection, tag: InfoTag, chain: Chains = default): ref InfoBox {.base, gcsafe.} =
-    var target = self.findByName(targethash, dir, chain)
+    var (target, dir) = self.findByName(targethash, dir, chain)
     if target == nil: return nil
     return target.requestInfo(targethash, dir, tag, chain)
 
