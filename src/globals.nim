@@ -86,7 +86,6 @@ var multi_port_additions: seq[Port]
 # [posix constants]
 const SO_ORIGINAL_DST* = 80
 const IP6T_SO_ORIGINAL_DST* = 80
-
 const SOL_IP* = 0
 const SOL_IPV6* = 41
 

@@ -150,20 +150,20 @@ proc findByName*(self: Tunnel, target: string or Hash, dir: SigDirection, chain:
                 res = self.ties[chain].prev.findByName(target, left, chain)
             res
 
-proc findByType*(self: Tunnel, target: typedesc, dir: SigDirection, chain: Chains = default): tuple[t: Tunnel, s: SigDirection] =
+proc findByType*(self: Tunnel, target: typedesc, dir: SigDirection, chain: Chains = default): tuple[t: target, s: SigDirection] =
     case dir:
         of left:
             if self.ties[chain].prev != nil:
-                if self.ties[chain].prev is target: return (self.ties[chain].prev, left)
+                if self.ties[chain].prev is target: return (target(self.ties[chain].prev), left)
                 else: self.ties[chain].prev.findByType(target, dir, chain)
             else: (nil, left)
         of right:
             if self.ties[chain].next != nil:
-                if self.ties[chain].next is target: return (self.ties[chain].next, right)
+                if self.ties[chain].next is target: return (target(self.ties[chain].next), right)
                 else: self.ties[chain].next.findByType(target, dir, chain)
             else: (nil, right)
         of both:
-            var res: tuple[t: Tunnel, s: SigDirection]
+            var res: tuple[t: target, s: SigDirection]
             if self.ties[chain].next != nil:
                 res = self.ties[chain].next.findByType(target, right, chain)
             if res.t == nil and self.ties[chain].prev != nil:

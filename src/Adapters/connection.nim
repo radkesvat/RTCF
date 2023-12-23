@@ -15,7 +15,7 @@ logScope:
 
 
 type
-    ConnectionAdapetr* = ref object of Adapter
+    ConnectionAdapter* = ref object of Adapter
         socket: StreamTransport
         readLoopFut: Future[void]
         writeLoopFut: Future[void]
@@ -25,9 +25,10 @@ const
     bufferSize = 4096
 
 
+proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.socket
 
 # called when we are on the right side
-proc readloop(self: ConnectionAdapetr){.async.} =
+proc readloop(self: ConnectionAdapter){.async.} =
     #read data from chain, write to socket
     var socket = self.socket
     try:
@@ -37,9 +38,9 @@ proc readloop(self: ConnectionAdapetr){.async.} =
                 raise newAsyncStreamIncompleteError()
     except CatchableError as e:
         trace "Read Loop finished with ", exception = e.msg
-    self.signal(both,close)
+    self.signal(both, close)
 
-proc writeloop(self: ConnectionAdapetr){.async.} =
+proc writeloop(self: ConnectionAdapter){.async.} =
     #read data from socket, write to chain
     var socket = self.socket
     try:
@@ -47,40 +48,43 @@ proc writeloop(self: ConnectionAdapetr){.async.} =
             var sv = self.store.pop()
             sv.reserve(bufferSize)
             var actual = await socket.readOnce(sv.buf(), bufferSize)
+            if actual == 0:
+                trace "close for 0 bytes read from socket"; break
+
             sv.setLen(actual)
             await procCall write(Tunnel(self), sv)
     except CatchableError as e:
         trace "Write Loop finished with ", exception = e.msg
-    self.signal(both,close)
+    self.signal(both, close)
 
 
-method init(self: ConnectionAdapetr, name: string, socket: StreamTransport, store: Store): ConnectionAdapetr =
+method init(self: ConnectionAdapter, name: string, socket: StreamTransport, store: Store): ConnectionAdapter =
     self.socket = socket
     self.store = store
     procCall init(Adapter(self), name, hsize = 0)
 
 
 
-proc new*(t: typedesc[ConnectionAdapetr], name: string = "ConnectionAdapetr", socket: StreamTransport, store: Store): ConnectionAdapetr =
-    result = new ConnectionAdapetr
+proc new*(t: typedesc[ConnectionAdapter], name: string = "ConnectionAdapter", socket: StreamTransport, store: Store): ConnectionAdapter =
+    result = new ConnectionAdapter
     result.init(name, socket, store)
-    trace "Initialized new ConnectionAdapetr", name
+    trace "Initialized new ConnectionAdapter", name
 
 
-method write*(self: ConnectionAdapetr, rp: StringView, chain: Chains = default): Future[void] {.async.} =
-    doAssert false, "you cannot call write of ConnectionAdapetr!"
+method write*(self: ConnectionAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
+    doAssert false, "you cannot call write of ConnectionAdapter!"
 
-method read*(self: ConnectionAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
-    doAssert false, "you cannot call read of ConnectionAdapetr!"
-    
+method read*(self: ConnectionAdapter, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
+    doAssert false, "you cannot call read of ConnectionAdapter!"
 
 
-proc start(self: ConnectionAdapetr) =
+
+proc start(self: ConnectionAdapter) =
     {.cast(raises: []).}:
         self.readLoopFut = self.readloop()
         self.writeLoopFut = self.writeloop()
 
-method signal*(self: ConnectionAdapetr, dir: SigDirection, sig: Signals, chain: Chains = default) =
+method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
     var broadcast = false
     if sig == close or sig == stop:
         broadcast = not self.stopped

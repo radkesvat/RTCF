@@ -1,5 +1,8 @@
 import tunnel, stew/byteutils, threading/[channels, atomics]
-# from adapters/mux import MuxAdapetr
+from adapters/connection import ConnectionAdapter, getRawSocket
+
+
+
 logScope:
     topic = "Port Tunnel"
 
@@ -12,31 +15,37 @@ logScope:
 # ----------------------------------
 #
 #   This tunnel adds port header, finds the right value for the port
-#   and when Reading from it , it extcarcts port header and saves it 
+#   and when Reading from it , it extcarcts port header and saves it
 #   and provide interface for other tunnel/adapters to get that port
+#   
+#   This tunnel requires ConnectionAdapter 
 #
-#
-#
+    
 
 
+const SO_ORIGINAL_DST* = 80
+const IP6T_SO_ORIGINAL_DST* = 80
+const SOL_IP* = 0
+const SOL_IPV6* = 41
 
 type
     Port = uint16
     PortTunnel = ref object of Tunnel
         writePort: Port
         readPort: Port
-        multiport:bool
+        multiport: bool
+        flag_readmode: bool
 
 const PortTunnelHeaderSize = sizeof(Port)
 
-method init(self: PortTunnel, name: string,multiport:bool ,writeport:Port){.base, raises: [], gcsafe.} =
+method init(self: PortTunnel, name: string, multiport: bool, writeport: Port){.base, raises: [], gcsafe.} =
     procCall init(Tunnel(self), name, hsize = PortTunnelHeaderSize)
     self.writeport = writeport
     self.multiport = multiport
 
-proc new*(t: typedesc[PortTunnel], name: string = "PortTunnel",multiport:bool, writeport:int = 0): PortTunnel =
+proc new*(t: typedesc[PortTunnel], name: string = "PortTunnel", multiport: bool, writeport: int = 0): PortTunnel =
     result = new PortTunnel
-    result.init(name ,multiport,writeport.Port)
+    result.init(name, multiport, writeport.Port)
     trace "Initialized", name
 
 method write*(self: PortTunnel, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
@@ -50,11 +59,33 @@ method read*(self: PortTunnel, bytes: int, chain: Chains = default): Future[Stri
     setReadHeader(self, await procCall read(Tunnel(self), bytes+self.hsize))
     copyMem(addr self.readPort, self.getReadHeader, self.hsize)
     trace "extracted ", header = $self.readPort, result = $self.readLine
-    if self.writeport == 0: self.writeport = self.readPort # just for hint
+
+    if self.flag_readmode and self.writeport == 0: self.writeport = self.readPort
     return self.readLine
 
 
-proc start(self: PortTunnel) = discard
+proc start(self: PortTunnel) =
+    var (target, dir) = self.findByType(ConnectionAdapter, both, Chains.default)
+    doAssert target != nil, "Port Tunnel could not find connection adapter on default chain!"
+    case dir:
+        of left:
+            #left means we should get the port from it for writing (only when multi port)
+            if self.multiport:
+                assert self.writePort == 0
+                var sock = target.getRawSocket()
+                var objbuf = newString(len = 28)
+                var size = int(if isV4Mapped(sock.remoteAddress): 16 else: 28)
+                let sol = int(if isV4Mapped(sock.remoteAddress): SOL_IP else: SOL_IPV6)
+                if not getSockOpt(sock.fd, sol, int(SO_ORIGINAL_DST), addr objbuf[0], size,28):
+                    trace "multiport failure getting origin port. !"
+                    raise newException(AssertionDefect, "multiport failure getting origin port. !")
+
+                bigEndian16(addr self.writePort, addr objbuf[2])
+                trace "Multiport "port = self.writePort
+        of right:
+            # hmm, the port is received when reading data
+            self.flag_readmode = true
+        else: discard
     #Todo:
     # if multi port and a connecton adapter found on the left
     # get the connection port and set as write port
