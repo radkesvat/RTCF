@@ -48,6 +48,7 @@ type
     FlowReadError* = ref object of FlowError
     InsufficientBytse* = ref object of FlowReadError
 
+    
     FlowWriteError* = ref object of FlowError
 
 proc `==`*(x, y: InfoTag): bool {.borrow.}

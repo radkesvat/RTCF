@@ -143,8 +143,8 @@ proc start(self: MuxAdapetr) =
                     of Side.Left:
                         # left mode, we create and send our cid signal
                         let cid = globalCounter.fetchAdd(1)
-                        globalTable[cid].first = newAsyncChannel[StringView]()
-                        globalTable[cid].second = newAsyncChannel[StringView]()
+                        globalTable[cid].first = newAsyncChannel[StringView](maxItems = 16)
+                        globalTable[cid].second = newAsyncChannel[StringView](maxItems = 16)
 
                         self.selectedCon = (cid, addr globalTable[cid])
                         self.masterChannel.sendSync cid
@@ -170,8 +170,8 @@ proc start(self: MuxAdapetr) =
                         # we find our channels,write and read to it
                         doAssert(self.selectedCon.cid != 0)
                         doAssert(not globalTableHas self.selectedCon.cid)
-                        globalTable[self.selectedCon.cid].first = newAsyncChannel[StringView]()
-                        globalTable[self.selectedCon.cid].second = newAsyncChannel[StringView]()
+                        globalTable[self.selectedCon.cid].first = newAsyncChannel[StringView](maxItems = 16)
+                        globalTable[self.selectedCon.cid].second = newAsyncChannel[StringView](maxItems = 16)
 
                         self.selectedCon.dcp = addr globalTable[self.selectedCon.cid]
 
@@ -231,7 +231,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                     assert size.int == sv.len # full packet must be received here
                     if size.int > bytes:
                         trace "closing read channel.", size
-                        raise newException(InsufficientBytse,message= "read close, size: " & $size)
+                        raise newException(CancelledError,message= "read close, size: " & $size)
 
 
                     return sv
@@ -251,7 +251,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                     assert size.int == sv.len # full packet must be received here
                     if size.int > bytes:
                         trace "closing read channel.", size
-                        raise newException(InsufficientBytse,message= "read close, size: " & $size)
+                        raise newException(CancelledError,message= "read close, size: " & $size)
 
                     return sv
 
