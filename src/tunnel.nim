@@ -48,7 +48,6 @@ type
     FlowReadError* = ref object of FlowError
     InsufficientBytse* = ref object of FlowReadError
 
-
     FlowWriteError* = ref object of FlowError
 
 proc `==`*(x, y: InfoTag): bool {.borrow.}
@@ -256,14 +255,24 @@ type
     Adapter* = ref object of Tunnel
         location*: Location
         side*: Side
- # method write*(self: Adapter, data: Rope): Future[void] =
- #     quit "Implenet Adapter write"
 
- # method read*(self: Adapter): Future[StringView] =
- #     quit "Implenet Adapter read"
+method init*(self: Adapter, name: string, hsize: static[int]){.base, gcsafe.} =
+    procCall init(Adapter(self), name, hsize = 0)
 
- # method connect*(self: Adapter) =
- #     quit "Implenet Adapter connect"
+    if self.getNext != nil:
+        doAssert self.getPrev == nil, "Adapters rule broken, the chain is not finished."
+        self.side = Side.Left
+    else:
+        self.side = Side.Right
 
- # method disconnect*(self: Adapter): Rope =
- #     quit "Implenet Adapter read"
+# method write*(self: Adapter, data: Rope): Future[void] =
+    #     quit "Implenet Adapter write"
+
+    # method read*(self: Adapter): Future[StringView] =
+    #     quit "Implenet Adapter read"
+
+    # method connect*(self: Adapter) =
+    #     quit "Implenet Adapter connect"
+
+    # method disconnect*(self: Adapter): Rope =
+    #     quit "Implenet Adapter read"

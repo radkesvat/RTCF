@@ -22,7 +22,6 @@ logScope:
 
 type
     Port = uint16
-    FlowDir = SigDirection
     PortTunnel = ref object of Tunnel
         writePort: Port
         readPort: Port
@@ -30,16 +29,15 @@ type
 
 const PortTunnelHeaderSize = sizeof(Port)
 
-method init(self: PortTunnel, name: string,multiport:bool writeport:int){.base, raises: [], gcsafe.} =
+method init(self: PortTunnel, name: string,multiport:bool ,writeport:Port){.base, raises: [], gcsafe.} =
     procCall init(Tunnel(self), name, hsize = PortTunnelHeaderSize)
     self.writeport = writeport
     self.multiport = multiport
 
-proc new*(t: typedesc[PortTunnel], name: string,multiport:bool writeport:int = 0): PortTunnel =
-    let finalname = if name == "": "PortTunnel" else: name
+proc new*(t: typedesc[PortTunnel], name: string = "PortTunnel",multiport:bool, writeport:int = 0): PortTunnel =
     result = new PortTunnel
-    result.init(name = finalname,multiport,writeModePort.Port)
-    trace "Initialized new PortTunnel", name
+    result.init(name ,multiport,writeport.Port)
+    trace "Initialized", name
 
 method write*(self: PortTunnel, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
     setWriteHeader(self, data):
@@ -56,7 +54,8 @@ method read*(self: PortTunnel, bytes: int, chain: Chains = default): Future[Stri
     return self.readLine
 
 
-proc start(self: PortTunnel) =
+proc start(self: PortTunnel) = discard
+    #Todo:
     # if multi port and a connecton adapter found on the left
     # get the connection port and set as write port
     # else
@@ -69,5 +68,7 @@ proc start(self: PortTunnel) =
 method signal*(self: PortTunnel, dir: SigDirection, sig: Signals, chain: Chains = default) =
     if signal == start: self.start()
     procCall signal(Tunnel(self), dir, sig, chain)
+
+
 
 

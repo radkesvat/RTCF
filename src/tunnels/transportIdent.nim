@@ -1,0 +1,68 @@
+import tunnel, stew/byteutils, threading/[channels, atomics], store
+# from adapters/mux import MuxAdapetr
+logScope:
+    topic = "TransportIdent Tunnel"
+
+
+#       1    2    3    4    5    6    7
+# ------------------------------------
+#  flags|
+#-------------------------------------
+# Trans |
+#-------------------------------------
+#
+#  This tunnel identify the incoming packet trasport , it reads the 8 bit flag
+#  it also discardes fake upload packets
+#
+#
+#
+#
+
+type
+    TransportHeader = uint8
+    TransportIdentTunnel = ref object of Tunnel
+        header:TransportHeader
+        store: Store
+
+const TransportIdentTunnelHeaderSize = sizeof TransportHeader
+from tunnels/tcp import TcpPacketFlag
+from tunnels/udp import UdpPacketFlag
+from tunnels/tcp import FakeUploadFlag
+
+method init(self: TransportIdentTunnel, name: string){.base, raises: [], gcsafe.} =
+    procCall init(Tunnel(self), name, hsize = TransportIdentTunnelHeaderSize)
+    self.header = UdpPacketFlag
+
+proc new*(t: typedesc[TransportIdentTunnel], name: string = "TransportIdentTunnel"): TransportIdentTunnel =
+    result = new TransportIdentTunnel
+    result.init(name)
+    trace "Initialized", name
+
+method write*(self: TransportIdentTunnel, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
+    assert self.header != 0x0 , "cannot write before first read af transport header to identify!"
+    setWriteHeader(self, data):
+        copyMem(self.getWriteHeader, addr self.header, self.hsize)
+        trace "Appended ", header = $self.header, to = ($self.writeLine), name = self.name
+
+    procCall write(Tunnel(self), self.writeLine)
+
+
+
+method read*(self: TransportIdentTunnel, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
+    while true:
+        setReadHeader(self, await procCall read(Tunnel(self), bytes+self.hsize))
+        if self.header == 0x0:
+            copyMem(addr self.header, self.getReadHeader, self.hsize)
+            self.header = self.header and (not FakeUploadFlag)
+
+        trace "extracted ", header = $self.getReadHeader[][0], result = $self.readLine
+        if (self.getReadHeader[][0] and FakeUploadFlag) == FakeUploadFlag:
+            trace "discarded received fake packet", bytes = self.readLine.len
+        else:
+            return self.readLine
+
+
+
+
+
+

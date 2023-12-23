@@ -57,22 +57,27 @@ template safeCancel(body: untyped) =
     except CancelledError as e:
         if not self.stopped: raise e
 
-# only for the right side
 proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
     safeCancel:
         while not self.stopped:
-            var sv = await self.selectedCon.dcp.first.recv()
+            var sv = await globalTable[cid].first.recv()
             self.buffered.add sv
 
 
-# only for the right side
 proc acceptcidloop(self: MuxAdapetr){.async.} =
     safeCancel:
         while not self.stopped:
             let new_cid = await self.masterChannel.recv()
             assert(globalTableHas new_cid)
+            try:
+                self.handles.add self.handleCid(new_cid)
+            except CatchableError as e:
+                trace "sending close for", cid = new_cid, msg = e.msg
+                var sv = self.store.pop()
+                sv.write(0.uint16); sv.shiftl sizeof uint16
+                sv.write(new_cid.Cid); sv.shiftl sizeof Cid
+                await procCall write(Tunnel(self), sv)
 
-            self.handles.add self.handleCid(new_cid)
 
 
 # called when we are on the right side
@@ -122,63 +127,61 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
 
 
 method init(self: MuxAdapetr, name: string, master: AsyncChannel[Cid], store: Store, loc: Location,
-    cid: Cid, createConCb: proc(cid: Cid): void {.raises: [], gcsafe.}): MuxAdapetr =
+    cid: Cid): MuxAdapetr =
     self.location = loc
     self.store = store
     self.masterChannel = master
     self.selectedCon.cid = cid
-    self.createConCb = createConCb
     procCall init(Adapter(self), name, hsize = 0)
 
-    if self.getNext != nil:
-        doAssert self.getPrev == nil, "Adapters rule broken, the chain is not finished."
-        self.side = Side.Left
-    else:
-        self.side = Side.Right
 
-    case self.location:
-        of BeforeGfw:
-            case self.side:
-                of Side.Left:
-                    # left mode, we create and send our cid signal
-                    let cid = globalCounter.fetchAdd(1)
-                    globalTable[cid].first = newAsyncChannel[StringView]()
-                    globalTable[cid].second = newAsyncChannel[StringView]()
-                    self.selectedCon = (cid, addr globalTable[cid])
-                    self.masterChannel.sendSync cid
+proc start(self: MuxAdapetr) =
+    {.cast(raises: []).}:
+        case self.location:
+            of BeforeGfw:
+                case self.side:
+                    of Side.Left:
+                        # left mode, we create and send our cid signal
+                        let cid = globalCounter.fetchAdd(1)
+                        globalTable[cid].first = newAsyncChannel[StringView]()
+                        globalTable[cid].second = newAsyncChannel[StringView]()
 
-                of Side.Right:
-                    # right side, we accept cid signals
-                    self.acceptConnectionFut = acceptcidloop(self)
-                    # we also need to read from right adapter
-                    # examine and forward data to left channel
-                    self.readloopFut = readloop(self, sendclose)
+                        self.selectedCon = (cid, addr globalTable[cid])
+                        self.masterChannel.sendSync cid
 
-        of AfterGfw:
-            case self.side:
-                of Side.Left:
-                    # left side, we create cid signals
-                    self.acceptConnectionFut = acceptcidloop(self)
-                    # we also need to read from left adapter
-                    # examine and forward data to right channel
-                    self.readloopFut = readloop(self, create)
-                    doAssert(not self.createConCb.isNil())
+                    of Side.Right:
+                        # right side, we accept cid signals
+                        self.acceptConnectionFut = acceptcidloop(self)
+                        # we also need to read from right adapter
+                        # examine and forward data to left channel
+                        self.readloopFut = readloop(self, sendclose)
 
-                of Side.Right:
-                    # right mode, we have been created by left Mux
-                    # we find our channels,write and read to it
-                    doAssert(self.selectedCon.cid != 0)
-                    doAssert(globalTableHas self.selectedCon.cid)
-                    self.selectedCon.dcp = addr globalTable[self.selectedCon.cid]
+            of AfterGfw:
+                case self.side:
+                    of Side.Left:
+                        # left side, we create cid signals
+                        self.acceptConnectionFut = acceptcidloop(self)
+                        # we also need to read from left adapter
+                        # examine and forward data to right channel
+                        self.readloopFut = readloop(self, create)
 
+                    of Side.Right:
+                        # right mode, we have been created by left Mux
+                        # we find our channels,write and read to it
+                        doAssert(self.selectedCon.cid != 0)
+                        doAssert(not globalTableHas self.selectedCon.cid)
+                        globalTable[self.selectedCon.cid].first = newAsyncChannel[StringView]()
+                        globalTable[self.selectedCon.cid].second = newAsyncChannel[StringView]()
 
+                        self.selectedCon.dcp = addr globalTable[self.selectedCon.cid]
 
 
-proc new*(t: typedesc[MuxAdapetr], name: string = "", master: AsyncChannel[Cid], store: Store, loc: Location,
-    cid: Cid = 0, createConCb: proc(cid: Cid): void {.raises: [], gcsafe.} = nil): MuxAdapetr =
+
+
+proc new*(t: typedesc[MuxAdapetr], name: string = "MuxAdapetr", master: AsyncChannel[Cid], store: Store, loc: Location,
+    cid: Cid = 0): MuxAdapetr =
     result = new MuxAdapetr
-    let finalname = if name == "": "MuxAdapetr" else: name
-    result.init(name = finalname, name, master, store, loc, cid, createConCB)
+    result.init(name, master, store, loc, cid)
     trace "Initialized new MuxAdapetr", name
 
 
@@ -226,7 +229,11 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                     copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
                     assert self.selectedCon.cid == cid # ofcourse!
                     assert size.int == sv.len # full packet must be received here
-                    assert size > 0
+                    if size.int > bytes:
+                        trace "closing read channel.", size
+                        raise newException(InsufficientBytse,message= "read close, size: " & $size)
+
+
                     return sv
                 of Side.Right:
                     doAssert false, "this will not happen"
@@ -242,11 +249,17 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                     copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
                     assert self.selectedCon.cid == cid # ofcourse!
                     assert size.int == sv.len # full packet must be received here
-                    assert size > 0
+                    if size.int > bytes:
+                        trace "closing read channel.", size
+                        raise newException(InsufficientBytse,message= "read close, size: " & $size)
+
                     return sv
 
 method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains = default) =
     if sig == close or sig == stop: self.stopped = true
+    if sig == start:
+        self.start()
+
     procCall signal(Tunnel(self), dir, sig, chain)
 
     if sig == close or sig == stop:
@@ -264,7 +277,7 @@ method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains 
 
 proc staticInit() =
     logScope:
-        topic = "Global Memory"
+        section = "Global Memory"
 
     globalCounter.store(0)
     var total_size = sizeof(typeof(globalTable[][0])) * GlobalTableSize
