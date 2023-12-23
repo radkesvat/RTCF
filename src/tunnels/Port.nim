@@ -1,4 +1,6 @@
-import tunnel, stew/byteutils, threading/[channels, atomics]
+import tunnel
+import std/[endians]
+
 from adapters/connection import ConnectionAdapter, getRawSocket
 
 
@@ -65,9 +67,10 @@ method read*(self: PortTunnel, bytes: int, chain: Chains = default): Future[Stri
 
 
 proc start(self: PortTunnel) =
-    var (target, dir) = self.findByType(ConnectionAdapter, both, Chains.default)
-    doAssert target != nil, "Port Tunnel could not find connection adapter on default chain!"
-    case dir:
+    {.cast(raises: []).}:
+        var (target, dir) = self.findByType(ConnectionAdapter, both, Chains.default)
+        doAssert target != nil, "Port Tunnel could not find connection adapter on default chain!"
+        case dir:
         of left:
             #left means we should get the port from it for writing (only when multi port)
             if self.multiport:
@@ -76,25 +79,16 @@ proc start(self: PortTunnel) =
                 var objbuf = newString(len = 28)
                 var size = int(if isV4Mapped(sock.remoteAddress): 16 else: 28)
                 let sol = int(if isV4Mapped(sock.remoteAddress): SOL_IP else: SOL_IPV6)
-                if not getSockOpt(sock.fd, sol, int(SO_ORIGINAL_DST), addr objbuf[0], size,28):
+                if not getSockOpt(sock.fd, sol, int(SO_ORIGINAL_DST),cast[var pointer](addr objbuf[0]), size):
                     trace "multiport failure getting origin port. !"
                     raise newException(AssertionDefect, "multiport failure getting origin port. !")
 
                 bigEndian16(addr self.writePort, addr objbuf[2])
-                trace "Multiport "port = self.writePort
+                trace "Multiport ",port = self.writePort
         of right:
             # hmm, the port is received when reading data
             self.flag_readmode = true
         else: discard
-    #Todo:
-    # if multi port and a connecton adapter found on the left
-    # get the connection port and set as write port
-    # else
-
-    # var (target, dir) = self.findByType(MuxAdapetr, both, Chains.default)
-    # self.flow = dir
-    # doAssert not isNil(target), "PortTunnel could not find Mux adapter in current chain."
-    #Todo: find connection adapter, get socket from it and set the write port to it
 
 method signal*(self: PortTunnel, dir: SigDirection, sig: Signals, chain: Chains = default) =
     if signal == start: self.start()
@@ -102,4 +96,5 @@ method signal*(self: PortTunnel, dir: SigDirection, sig: Signals, chain: Chains 
 
 
 
+proc getReadPort*(self: PortTunnel):Port = self.readPort
 

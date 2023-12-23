@@ -221,16 +221,15 @@ template bytes*(v: StringView; name: untyped; code: untyped) =
     when ncstr:
         safeAfterExport(v)
         v[].exportflag = true
-        var p: ptr Payload = cast[ptr Payload](v.buf().offset -sizeof(PayloadBase))
+        var p: ptr Payload = cast[ptr Payload](v.buf().offset(-sizeof(PayloadBase)))
         v[].backup = p.cap
         p[].cap = v.len
         name = cast[seq[byte]](NimSeqV2(len: v.len, p: p))
-        return res
     else:
         name = @(toOpenArrayByte(v.buf(), 0, v.high))
     block:
-        defer:
-            safeAfterExport(v)
+        # defer:
+        #     safeAfterExport(v)
         code
 
 
@@ -272,7 +271,7 @@ proc write*(v: StringView; d: openArray[byte|char]) =
     copyMem(v.buf(), addr d[0], d.len)
     v[].lenpos = v[].curpos + d.len
 
-proc write*(v: StringView; d:SomeInteger) =
+proc write*(v: StringView; d: SomeInteger) =
     v.write((cast[ptr UncheckedArray[byte]](addr d)).toOpenArray(0, sizeof(typeof d)))
 
 # bad idea but we try to move your string

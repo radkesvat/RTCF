@@ -58,10 +58,16 @@ template safeCancel(body: untyped) =
         if not self.stopped: raise e
 
 proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
-    safeCancel:
+    try:
         while not self.stopped:
             var sv = await globalTable[cid].first.recv()
             self.buffered.add sv
+
+    except CancelledError as e:
+        trace "handleCid ended with CancelledError"
+    except CatchableError as e:
+        trace "handleCid ended with Non CancelledError", etype = e.name
+        self.masterChannel.sendSync cid
 
 
 proc acceptcidloop(self: MuxAdapetr){.async.} =
@@ -176,8 +182,6 @@ proc start(self: MuxAdapetr) =
                         self.selectedCon.dcp = addr globalTable[self.selectedCon.cid]
 
 
-
-
 proc new*(t: typedesc[MuxAdapetr], name: string = "MuxAdapetr", master: AsyncChannel[Cid], store: Store, loc: Location,
     cid: Cid = 0): MuxAdapetr =
     result = new MuxAdapetr
@@ -213,7 +217,6 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
                     rp.shiftl CidHeaderLen
                     rp.write(self.selectedCon.cid)
                     await self.selectedCon.dcp.first.send(rp)
-
 
 
 method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
@@ -257,10 +260,8 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
 method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains = default) =
     if sig == close or sig == stop: self.stopped = true
-    if sig == start:
-        self.start()
+    if sig == start: self.start()
 
-    procCall signal(Tunnel(self), dir, sig, chain)
 
     if sig == close or sig == stop:
         self.stopped = true
@@ -269,6 +270,9 @@ method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains 
         if not isNil(self.acceptConnectionFut): cancelSoon(self.acceptConnectionFut)
         if not isNil(self.readloopFut): cancelSoon(self.readloopFut)
         self.handles.apply do(x: Future[void]): cancelSoon x
+
+    
+    procCall signal(Tunnel(self), dir, sig, chain)
 
     if sig == breakthrough: doAssert self.stopped, "break through signal while still running?"
 

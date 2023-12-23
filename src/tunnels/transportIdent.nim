@@ -1,4 +1,4 @@
-import tunnel, stew/byteutils, threading/[channels, atomics], store
+import tunnel, store
 # from adapters/mux import MuxAdapetr
 logScope:
     topic = "TransportIdent Tunnel"
@@ -21,13 +21,15 @@ logScope:
 type
     TransportHeader = uint8
     TransportIdentTunnel = ref object of Tunnel
-        header:TransportHeader
+        header: TransportHeader
         store: Store
 
 const TransportIdentTunnelHeaderSize = sizeof TransportHeader
+
 from tunnels/tcp import TcpPacketFlag
 from tunnels/udp import UdpPacketFlag
 from tunnels/tcp import FakeUploadFlag
+
 
 method init(self: TransportIdentTunnel, name: string){.base, raises: [], gcsafe.} =
     procCall init(Tunnel(self), name, hsize = TransportIdentTunnelHeaderSize)
@@ -39,7 +41,7 @@ proc new*(t: typedesc[TransportIdentTunnel], name: string = "TransportIdentTunne
     trace "Initialized", name
 
 method write*(self: TransportIdentTunnel, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
-    assert self.header != 0x0 , "cannot write before first read af transport header to identify!"
+    assert self.header != 0x0, "cannot write before first read af transport header to identify!"
     setWriteHeader(self, data):
         copyMem(self.getWriteHeader, addr self.header, self.hsize)
         trace "Appended ", header = $self.header, to = ($self.writeLine), name = self.name
@@ -65,4 +67,5 @@ method read*(self: TransportIdentTunnel, bytes: int, chain: Chains = default): F
 
 
 
-
+proc isTcp*(self: TransportIdentTunnel): bool = (self.header and TcpPacketFlag) == TcpPacketFlag
+proc isUcp*(self: TransportIdentTunnel): bool = (self.header and FakeUploadFlag) == FakeUploadFlag

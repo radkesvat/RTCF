@@ -1,5 +1,5 @@
-import tunnel, stew/byteutils, threading/[channels, atomics], store
-# from adapters/mux import MuxAdapetr
+import tunnel, store
+
 logScope:
     topic = "Udp Tunnel"
 
