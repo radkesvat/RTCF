@@ -1,4 +1,5 @@
 import stew/byteutils, stringview, chronos, hashes
+from threading/channels import AsyncChannelError
 
 export byteutils, stringview, chronos, hashes
 
@@ -43,13 +44,13 @@ type
         stopped*: bool
 
     #raised when a tunnel dose not satisfy to continue the process
-    FlowError* = object of CatchableError
-        tunnel*: Tunnel
+    FlowError* = ref object of CatchableError
+    FlowCloseError* = ref object of FlowError
     FlowReadError* = ref object of FlowError
     InsufficientBytse* = ref object of FlowReadError
-
-    
     FlowWriteError* = ref object of FlowError
+
+    CancelErrors* = AsyncChannelError or FlowError or CancelledError
 
 proc `==`*(x, y: InfoTag): bool {.borrow.}
 proc `$`*(x: InfoTag): string {.borrow.}
@@ -98,7 +99,7 @@ proc setReadHeader*(self: Tunnel, sv: StringView) {.gcsafe, raises: [Insufficien
     if self.readLine != new_stringview:
         if new_stringview.len < self.hsize:
             error "stream finished before full header was read.", tunnel = self.name, hsize = self.hsize
-            raise InsufficientBytse(msg: "stream finished before full header was read.", tunnel: self)
+            raise InsufficientBytse(msg: "stream finished before full header was read.")
         self.readHeaderBuf = new_stringview.buf()
         self.readLine = new_stringview
 

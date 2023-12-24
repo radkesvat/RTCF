@@ -1558,6 +1558,8 @@ when defined(windows):
             retFuture.complete(WaitableResult.Ok)
 
     proc cancellation(udata: pointer) {.gcsafe.} =
+      echo "cancel!"
+
       doAssert(not(isNil(waitHandle)))
       if not(retFuture.finished()):
         discard closeWaitable(waitHandle)

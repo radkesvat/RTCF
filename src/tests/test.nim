@@ -1,3 +1,12 @@
-import adapters/mux,store
+import chronos, chronos/timer, threading/channels
 
-echo "hi"
+
+var chan: AsyncChannel[int]
+
+
+
+
+
+fatal "hello world?"
+
+runForever()

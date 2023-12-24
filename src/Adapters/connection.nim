@@ -37,8 +37,15 @@ proc readloop(self: ConnectionAdapter){.async.} =
             if sv.len != await socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
     except CatchableError as e:
-        trace "Read Loop finished with ", exception = e.msg
-    self.signal(both, close)
+        when e is CancelErrors:
+            trace "readloop got canceled", name = e.name, msg = e.msg
+        else: 
+            error "readloop got Exception", name = e.name, msg = e.msg
+            raise e
+    if not self.stopped: signal(self, both, close)
+    
+
+  
 
 proc writeloop(self: ConnectionAdapter){.async.} =
     #read data from socket, write to chain
@@ -53,10 +60,15 @@ proc writeloop(self: ConnectionAdapter){.async.} =
 
             sv.setLen(actual)
             await procCall write(Tunnel(self), sv)
+            
     except CatchableError as e:
-        trace "Write Loop finished with ", exception = e.msg
-    self.signal(both, close)
-
+        when e is CancelErrors:
+            trace "writeloop got canceled", name = e.name, msg = e.msg
+        else: 
+            error "writeloop got Exception", name = e.name, msg = e.msg
+            raise e
+    if not self.stopped: signal(self, both, close)
+    
 
 method init(self: ConnectionAdapter, name: string, socket: StreamTransport, store: Store): ConnectionAdapter =
     self.socket = socket
@@ -68,7 +80,7 @@ method init(self: ConnectionAdapter, name: string, socket: StreamTransport, stor
 proc new*(t: typedesc[ConnectionAdapter], name: string = "ConnectionAdapter", socket: StreamTransport, store: Store): ConnectionAdapter =
     result = new ConnectionAdapter
     result.init(name, socket, store)
-    trace "Initialized new ConnectionAdapter", name
+    trace "Initialized", name
 
 
 method write*(self: ConnectionAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
@@ -83,21 +95,24 @@ proc start(self: ConnectionAdapter) =
     {.cast(raises: []).}:
         self.readLoopFut = self.readloop()
         self.writeLoopFut = self.writeloop()
+        asyncSpawn self.readLoopFut
+        asyncSpawn self.writeLoopFut
 
-method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
-    var broadcast = false
-    if sig == close or sig == stop:
-        broadcast = not self.stopped
+proc stop*(self: ConnectionAdapter)=
+    if not self.stopped :
+        trace "stopping"
         self.stopped = true
         cancelSoon self.readLoopFut
-        cancelSoon self.writeLoopFut
+        cancelSoon self.writeLoopFut     
         self.socket.close()
 
+method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
+    if sig == close or sig == stop: self.stop()
+        
     if sig == start: self.start()
-
-    if broadcast: procCall signal(Tunnel(self), dir, sig, chain)
-
-
+    
     if sig == breakthrough: doAssert self.stopped, "break through signal while still running?"
+
+    procCall signal(Tunnel(self), dir, sig, chain)
 
 

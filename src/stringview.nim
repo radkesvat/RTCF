@@ -228,8 +228,8 @@ template bytes*(v: StringView; name: untyped; code: untyped) =
     else:
         name = @(toOpenArrayByte(v.buf(), 0, v.high))
     block:
-        # defer:
-        #     safeAfterExport(v)
+        defer:
+            safeAfterExport(v)
         code
 
 

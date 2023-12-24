@@ -45,6 +45,7 @@ proc pop*(self: Store): Stringview =
     return self.available.pop()
 
 proc reuse*(self: Store, v: sink Stringview) =
+    v.reset()
     self.available.add(move v)
 
 proc getRandomBuf*(self: Store,variety : int = 50): pointer =
