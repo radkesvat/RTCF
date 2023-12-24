@@ -259,7 +259,7 @@ type
         side*: Side
 
 method init*(self: Adapter, name: string, hsize: static[int]){.base, gcsafe.} =
-    procCall init(Adapter(self), name, hsize = 0)
+    procCall init(Tunnel(self), name, hsize = hsize)
 
     if self.getNext != nil:
         doAssert self.getPrev == nil, "Adapters rule broken, the chain is not finished."

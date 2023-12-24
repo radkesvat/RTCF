@@ -16,10 +16,10 @@ type Store* = ref object
 
 proc new*(t: typedesc[Store], cap = DefaultStoreCap): Store =
     new result
-    result.avalable = newSeqOfCap(cap)
+    result.available = newSeqOfCap[Stringview](cap)
+    result.available.setLen(cap)
     for i in 0 ..< cap:
         result.available[i] = newStringView(cap = DefaultStrvCap)
-    result.avalable.setLen(cap)
     result.maxCap = cap
     result.randomBuf = newStringOfCap(cap = 1_000_000) # 1 mb
     result.randomBuf.setLen 1_000_000

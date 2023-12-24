@@ -32,7 +32,7 @@ const SOL_IPV6* = 41
 
 type
     Port = uint16
-    PortTunnel = ref object of Tunnel
+    PortTunnel* = ref object of Tunnel
         writePort: Port
         readPort: Port
         multiport: bool

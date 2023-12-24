@@ -21,7 +21,7 @@ logScope:
 
 type
     UdpHeader = uint8
-    UdpTunnel = ref object of Tunnel
+    UdpTunnel* = ref object of Tunnel
         fakeupload_ratio: int
         fakeupload_bytes_left: uint64
         header:UdpHeader
@@ -53,7 +53,11 @@ method write*(self: UdpTunnel, data: StringView, chain: Chains = default): Futur
         fakepacket.setLen(data.len)
         copyMem(fakepacket.buf, self.store.getRandomBuf(1000), data.len)
         fakepacket.write(UdpPacketFlag and FakeUploadFlag)
-        await procCall write(Tunnel(self), self.writeLine)
+        try:
+            await procCall write(Tunnel(self), fakepacket)
+        finally:
+            self.store.reuse fakepacket
+            
 
 
 method read*(self: UdpTunnel, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
@@ -64,6 +68,8 @@ method read*(self: UdpTunnel, bytes: int, chain: Chains = default): Future[Strin
         trace "extracted ", header = $self.getReadHeader[][0], result = $self.readLine
         if (self.getReadHeader[][0] and FakeUploadFlag) == FakeUploadFlag:
             trace "discarded received fake packet", bytes = self.readLine.len
+            self.store.reuse self.readLine
+
         else:
             return self.readLine
 

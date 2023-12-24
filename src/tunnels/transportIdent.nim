@@ -20,7 +20,7 @@ logScope:
 
 type
     TransportHeader = uint8
-    TransportIdentTunnel = ref object of Tunnel
+    TransportIdentTunnel* = ref object of Tunnel
         header: TransportHeader
         store: Store
 
@@ -33,10 +33,10 @@ from tunnels/tcp import FakeUploadFlag
 
 method init(self: TransportIdentTunnel, name: string){.base, raises: [], gcsafe.} =
     procCall init(Tunnel(self), name, hsize = TransportIdentTunnelHeaderSize)
-    self.header = UdpPacketFlag
+    self.header = 0x0
 
 proc new*(t: typedesc[TransportIdentTunnel], name: string = "TransportIdentTunnel"): TransportIdentTunnel =
-    result = new TransportIdentTunnel
+    result =  TransportIdentTunnel()
     result.init(name)
     trace "Initialized", name
 

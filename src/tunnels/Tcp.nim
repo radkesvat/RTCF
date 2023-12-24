@@ -23,7 +23,7 @@ logScope:
 
 type
     TcpHeader = uint8
-    TcpTunnel = ref object of Tunnel
+    TcpTunnel* = ref object of Tunnel
         fakeupload_ratio: int
         fakeupload_bytes_left: uint64
         header: TcpHeader
@@ -55,7 +55,10 @@ method write*(self: TcpTunnel, data: StringView, chain: Chains = default): Futur
         fakepacket.setLen(data.len)
         copyMem(fakepacket.buf, self.store.getRandomBuf(1000), data.len)
         fakepacket.write(TcpPacketFlag and FakeUploadFlag)
-        await procCall write(Tunnel(self), self.writeLine)
+        try:
+            await procCall write(Tunnel(self),fakepacket)
+        finally:
+            self.store.reuse fakepacket
 
 
 method read*(self: TcpTunnel, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
@@ -66,6 +69,7 @@ method read*(self: TcpTunnel, bytes: int, chain: Chains = default): Future[Strin
         trace "extracted ", header = $self.getReadHeader[][0], result = $self.readLine
         if (self.getReadHeader[][0] and FakeUploadFlag) == FakeUploadFlag:
             trace "discarded received fake packet", bytes = self.readLine.len
+            self.store.reuse self.readLine
         else:
             return self.readLine
 

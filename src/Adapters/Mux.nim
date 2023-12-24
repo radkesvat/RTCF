@@ -314,8 +314,6 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
         self.stop; raise e
 
 
-
-
 method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains = default) =
     if sig == start: self.start()
 
