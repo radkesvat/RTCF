@@ -1,12 +1,9 @@
 import chronos, chronos/timer, threading/channels
 
 
-var chan: AsyncChannel[int]
-
-
-
-
-
-fatal "hello world?"
-
-runForever()
+waitFor sleepAsync(1.secs)
+waitFor sleepAsync(1.secs)
+waitFor sleepAsync(1.secs)
+waitFor sleepAsync(1.secs)
+waitFor sleepAsync(1.secs)
+echo "i"

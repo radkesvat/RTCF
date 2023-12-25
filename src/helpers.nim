@@ -1,7 +1,8 @@
 #shared to all other modules, provides log and some constants
-import chronicles,strformat
+import chronicles,strformat,pretty
 
-export chronicles,strformat
+export chronicles,strformat,pretty
+
 
 const hasThreadSupport* = compileOption("threads")
 

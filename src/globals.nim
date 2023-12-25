@@ -1,18 +1,19 @@
 import chronos
 import dns_resolve, hashes, pretty, parseopt, strutils, random, net, osproc, strformat
-import chronos/apps/http/[httpclient], stew/byteutils, json
-
+import chronos/apps/http/[httpclient], stew/byteutils, json, cpuinfo
+from os import sleep
 import checksums/sha1
 
 
 logScope:
-    topic = "Globals"
+    topic = "Setup"
 
 const version = "0.1"
 
 
 type RunMode*{.pure.} = enum
     unspecified, iran, kharej
+
 var mode*: RunMode = RunMode.unspecified
 
 
@@ -35,11 +36,14 @@ var listen_addr* = "::"
 var listen_port*: Port = 0.Port
 var next_route_addr* = ""
 var next_route_port*: Port = 0.Port
-    # var iran_addr* = ""
+# var iran_addr* = ""
 var cdn_port*: Port = 0.Port
 var cdn_domain*: string
 var cdn_ip*: IpAddress
 var self_ip*: IpAddress
+var cert*: string
+var pkey*: string
+
 
 
 # [passwords and hashes]
@@ -60,14 +64,14 @@ var keep_system_limit* = false
 var accept_udp* = false
 var terminate_secs* = 0
 var automode = false
+
 const autoCert* {.strdefine.}: string = ""
 const autoPKey* {.strdefine.}: string = ""
 const autoDomain*{.strdefine.}: string = ""
 const autoApiToken{.strdefine.}: string = ""
 const autoZoneID{.strdefine.}: string = ""
 
-var cert*: string
-var pkey*: string
+var threadsCount*: uint = when hasThreadSupport: cpuinfo.countProcessors().uint else: 1
 
 
 # [multiport]
@@ -97,24 +101,7 @@ proc chooseRandomLPort(): Port =
             fatal "multi port range may not include port 0!"; quit(1)
 
 
-#sudo iptables -t nat -A PREROUTING -s 131.0.72.0/22 -i eth0 -p tcp --dport 80 -j REDIRECT --to-port 1234
-#sudo iptables -t nat -A PREROUTING -p tcp -s 131.0.72.0/22 --dport 443 -j REDIRECT --to-port 444
 
-# 173.245.48.0/20
-# 103.21.244.0/22
-# 103.22.200.0/22
-# 103.31.4.0/22
-# 141.101.64.0/18
-# 108.162.192.0/18
-# 190.93.240.0/20
-# 188.114.96.0/20
-# 197.234.240.0/22
-# 198.41.128.0/17
-# 162.158.0.0/15
-# 104.16.0.0/13
-# 104.24.0.0/14
-# 172.64.0.0/13
-# 131.0.72.0/22
 
 proc registerNewDomainToCF(domain: string, ip: string): Future[bool] {.async.} =
     var secureSession = HttpSessionRef.new({HttpClientFlag.Http11Pipeline})
@@ -135,8 +122,6 @@ proc registerNewDomainToCF(domain: string, ip: string): Future[bool] {.async.} =
     var req = HttpClientRequestRef.new(secureSession, url, MethodPost, HttpVersion11, {CloseConnection}, headers,
                            body.toOpenArrayByte(0, body.high))
     var result = await fetch(req)
-    # print string.fromBytes(result.data)
-    # print result.status
     if result.status == 200:
         return true
     else:
@@ -309,6 +294,8 @@ proc init*() =
                                 quit(1)
                             else:
                                 automode = true
+                                cert = autoCert
+                                pkey = autoPKey
                         else:
                             automode = off
 
@@ -335,7 +322,11 @@ proc init*() =
 
                     of "listen":
                         listen_addr = (p.val)
-
+                    of "threads":
+                        when hasThreadSupport:
+                            threadsCount = parseInt(p.val).uint
+                        else:
+                            fatal "This version is not compiled with --threads:on !"; quit(1)
 
 
                     else:
@@ -420,27 +411,30 @@ proc init*() =
         var already_registered = false
         cdn_domain = $hash(self_ip) & "." & autoDomain
         info "Auto Mode! syncing with CloudFlare..."
-        while true:
-            try:
-                cdn_ip = parseIpAddress resolveIPv4(cdn_domain)
-                info "Resolved CloudFlare domain", "points at:" = cdn_ip
-                doAssert cdn_ip == self_ip
-                break
-            except:
-                if not already_registered:
-                    let suc = waitFor registerNewDomainToCF(cdn_domain, $self_ip)
-                    if not suc:
-                        fatal "Registration to CloudFlare was unsuccessful!"; quit(1)
-                    info "registered to CloudFlare!"
-                    notice "Checking every 10 sec for cdn to update with new domain, plase wait..."
-                    already_registered = true
-                else:
-                    notice "domain not registered yet!, plase wait..."
+        proc sync(){.async.} =
+            {.cast(gcsafe).}:
+                while true:
+                    try:
+                        cdn_ip = parseIpAddress resolveIPv4(cdn_domain)
+                        info "Resolved CloudFlare domain", "points at:" = cdn_ip
+                        break
+                    except:
+                        if not already_registered:
+                            # let suc = waitFor registerNewDomainToCF(cdn_domain, $self_ip)
+                            let suc = await registerNewDomainToCF(cdn_domain, "1.2.4.5")
+                            when defined release: macros.error "you forgot to uncomment!"; quit(1)
+                            if not suc:
+                                fatal "Registration to CloudFlare was unsuccessful!"; quit(1)
+                            info "registered to CloudFlare!"
+                            notice "Checking every 100 ms for cdn to update with new domain, plase wait..."
+                            already_registered = true
 
-            waitFor sleepAsync(10.secs)
+                        else:
+                            notice "domain not registered yet!, plase wait..."
+                        await sleepAsync(100)
+        waitFor sync()
 
-
-
+    echo "hehehe"
     password_hash = $(secureHash(password))
     sh1 = hash(password_hash).uint32
     sh2 = hash(sh1).uint32

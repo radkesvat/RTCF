@@ -183,7 +183,7 @@ template sharedBuildSwitches(){.dirty.} =
     # switch("d",&"""chronicles_enabled={ (if enable_chronicles: "on" else: "off") }""")
     # switch("experimental", "views")
     switch("d", "textlines=textblocks[stdout]")
-    switch("d", "chronicles_line_numbers")
+    # switch("d", "chronicles_line_numbers")
     switch("d", "chronicles_colors=AnsiColors")
     switch("d", "chronicles_disable_thread_id")
     switch("d", "chronicles_timestamps=none")
