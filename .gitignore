@@ -11,8 +11,12 @@ node_modules
 /dist
 /docs/internal
 
+
 #sad it uses raw paths
 src/generated/
+
+# private key-cert
+private.nim
 
 .env.local
 .env.*.local

@@ -1,8 +1,10 @@
 import std/[strformat, macros, strutils, ospaths]
 from macros import hint,error,warning
 
-const output_name = "RTCF"
 
+
+
+const output_name = "RTCF"
 const libs_dir = "libs"
 const output_dir = "dist"
 const src_dir = "src"
@@ -143,6 +145,15 @@ task install, "install nim deps":
     echo "then: nim build\n"
 
 template sharedBuildSwitches(){.dirty.} =
+    when fileExists("preivate.nim"):
+        import private
+    else:
+        warning "Auto Mode is disabled! you need to provide private.nim with your cert+pkey values"
+        #private.nim:
+        #   const auto_domain:string = "your domain"
+        #   const auto_public_key:string = "retn pem"
+        #   const auto_private_key:string = "pkey pem"
+
     switch("nimblePath", nimble_path&"/pkgs2")
     # switch("mm", "orc") not for chronos
     switch("mm", gc)
@@ -177,6 +188,12 @@ template sharedBuildSwitches(){.dirty.} =
     switch("d", "chronicles_disable_thread_id")
     switch("d", "chronicles_timestamps=none")
     switch("import", src_dir/"helpers.nim")
+
+    when declared(auto_domain):
+        switch("d", "autoCert=" & auto_domain)
+        switch("d", "autoPKey=" & auto_public_key)
+        switch("d", "autoDomain=" & autoDomain)
+
 
 
 

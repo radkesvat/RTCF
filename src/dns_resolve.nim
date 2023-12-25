@@ -1,4 +1,4 @@
-import nativesockets,print
+import nativesockets
 
 
 proc resolveIPv4*(address : string):string=

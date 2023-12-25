@@ -1,17 +1,16 @@
 
-import chronos
-import std/[random, exitprocs]
+import std/[random]
 from globals import nil
-import beforeGFW,afterGFW
+# import beforeGFW
 
 randomize()
 globals.init()
 
 
-if globals.mode == globals.RunMode.iran:
-    asyncSpawn beforeGFW.start()
-else:
-    asyncSpawn afterGFW.start()
+# if globals.mode == globals.RunMode.iran:
+#     beforeGFW.start()
+# else:
+#     afterGFW.start()
 
 
-runForever()
+

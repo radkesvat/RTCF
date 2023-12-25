@@ -1,14 +1,14 @@
-import std/[cpuinfo, locks, strutils, os]
+import std/[cpuinfo, locks, strutils, os,osproc]
 import chronos/unittest2/asynctests
 import chronos/threadsync
 import std/exitprocs
 import system / ansi_c
 import globals
 import system/ansi_c except SIGTERM
-
+from globals import nil
 
 #returns logical cores which each ``can`` run a thread
-let numProcs = countProcessors() - 1
+let numProcs = cpuinfo.countProcessors() - 1
 
 
 proc run(arg: int) {.thread.} =
@@ -27,21 +27,42 @@ for i in 0 ..< numProcs:
 
 joinThreads(threads)
 
-
 proc resetIptables() =
-    echo "reseting iptable nat"
-    assert 0 == execCmdEx("iptables -t nat -F").exitCode
-    assert 0 == execCmdEx("iptables -t nat -X").exitCode
-    if ip6tablesInstalled():
-        assert 0 == execCmdEx("ip6tables -t nat -F").exitCode
-        assert 0 == execCmdEx("ip6tables -t nat -X").exitCode
+    info "reseting iptable nat"
+    doAssert 0 == execCmdEx("iptables -t nat -F").exitCode
+    doAssert 0 == execCmdEx("iptables -t nat -X").exitCode
+    doAssert 0 == execCmdEx("ip6tables -t nat -F").exitCode
+    doAssert 0 == execCmdEx("ip6tables -t nat -X").exitCode
+
+
+proc isPortFree(port: Port): bool =
+    execCmdEx(&"""lsof -i:{port}""").output.len < 3
+
+
+
+proc createIptableMultiportRules() =
+    if globals.reset_iptable: resetIptables()
+    
+    proc rule(protocal : string)=
+        if not (globals.multi_port_min == 0.Port or globals.multi_port_max == 0.Port):
+            doAssert 0 == execCmdEx(&"""iptables -t nat -A PREROUTING -p {protocal} --dport {globals.multi_port_min}:{globals.multi_port_max} -j REDIRECT --to-port {globals.listen_port}""").exitCode
+            doAssert 0 == execCmdEx(&"""ip6tables -t nat -A PREROUTING -p {protocal} --dport {globals.multi_port_min}:{globals.multi_port_max} -j REDIRECT --to-port {globals.listen_port}""").exitCode
+
+        for port in globals.multi_port_additions:
+            doAssert 0 == execCmdEx(&"""iptables -t nat -A PREROUTING -p {protocal} --dport {port} -j REDIRECT --to-port {globals.listen_port}""").exitCode
+            doAssert 0 == execCmdEx(&"""ip6tables -t nat -A PREROUTING -p {protocal} --dport {port} -j REDIRECT --to-port {globals.listen_port}""").exitCode
+    
+    rule("tcp")
+    if globals.accept_udp: rule("udp")
+
+
 
 
 
 proc main()=
     #full reset iptables at exit (if the user allowed)
     if globals.multi_port and globals.reset_iptable :
-        addExitProc do(): globals.resetIptables()
+        addExitProc do(): resetIptables()
         setControlCHook do(){.noconv.}: quit()
         c_signal(SIGTERM, proc(a: cint){.noconv.} = quit())
 
