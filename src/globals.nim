@@ -3,39 +3,23 @@ import dns_resolve, hashes, print, parseopt, strutils, random, net, osproc, strf
 import checksums/sha1
 
 
-const version = "6.8"
+logScope:
+    topic = "Globals"
+
+const version = "0.1"
+
 
 type RunMode*{.pure.} = enum
     unspecified, iran, kharej
-
 var mode*: RunMode = RunMode.unspecified
 
-# [Log Options]
-var log_conn_create* = true
-var log_data_len* = false
-var log_conn_destory* = false
-var log_conn_error* = false
-
-# [TLS]
-let tls13_record_layer* = "\x17\x03\x03"
-let tls13_record_layer_data_len_size*: uint = 2
-let full_tls_record_len*: uint = tls13_record_layer.len().uint + tls13_record_layer_data_len_size
 
 
 # [Connection]
 var trust_time*: uint = 3 #secs
-var upload_cons*: uint = 8
-var download_cons*: uint = 8
-var connection_age*: uint = 30 # secs
+var connection_age*: uint = 600 # secs
 var connection_rewind*: uint = 4 # secs
-# var pool_size*: uint = 24
-# var pool_age*: uint = 15
-var fakeupload_con_age*: uint = 60 #secs
-var max_pool_unused_time*: uint = 60 #secs
-let mux_record_len*: uint32 = 5 #2bytes port 2bytes id 1byte reserved
 var max_idle_timeout*:int = 500 #secs
-
-# var udp_max_ppc*: uint32 = 500
 var udp_max_idle_time*: uint = 12000 #secs
 
 
@@ -45,16 +29,14 @@ var noise_ratio*: uint = 0
 
 # [Routes]
 var listen_addr* = "::"
-
 var listen_port*: Port = 0.Port
 var next_route_addr* = ""
 var next_route_port*: Port = 0.Port
 var iran_addr* = ""
 var iran_port*: Port = 0.Port
-var final_target_domain* = ""
-var final_target_ip*: string
-var trusted_foreign_peers*: seq[IpAddress]
-const final_target_port*: Port = 443.Port # port of the sni host (443 for tls handshake)
+var cdn_domain*: string
+var cdn_ip*: string
+
 var self_ip*: IpAddress
 
 
@@ -66,7 +48,7 @@ var sh2*: uint32
 var sh3*: uint32
 var sh4*: uint32
 var sh5*: uint8
-var random_str* = newString(len = 0)
+
 var fast_encrypt_width*: uint = 600
 
 # [settings]
@@ -83,11 +65,6 @@ var multi_port_min: Port = 0.Port
 var multi_port_max: Port = 0.Port
 var multi_port_additions: seq[Port]
 
-# [posix constants]
-const SO_ORIGINAL_DST* = 80
-const IP6T_SO_ORIGINAL_DST* = 80
-const SOL_IP* = 0
-const SOL_IPV6* = 41
 
 
 proc isPortFree*(port: Port): bool =
@@ -113,13 +90,7 @@ proc ip6tablesInstalled(): bool {.used.} =
 proc lsofInstalled(): bool {.used.} =
     execCmdEx("""dpkg-query -W --showformat='${Status}\n' lsof|grep "install ok install"""").output != ""
 
-proc resetIptables*() =
-    echo "reseting iptable nat"
-    assert 0 == execCmdEx("iptables -t nat -F").exitCode
-    assert 0 == execCmdEx("iptables -t nat -X").exitCode
-    if ip6tablesInstalled():
-        assert 0 == execCmdEx("ip6tables -t nat -F").exitCode
-        assert 0 == execCmdEx("ip6tables -t nat -X").exitCode
+
 
 template FWProtocol(): string = (if accept_udp: "all" else: "tcp")
 
@@ -169,6 +140,30 @@ proc multiportSupported(): bool =
             return false
 
         return true
+
+
+
+proc increaseSystemMaxFd()=
+    #increase systam maximum fds to be able to handle more than 1024 cons 
+    when defined(linux) and not defined(android):
+        import std/[posix, os, osproc]
+
+        if not globals.keep_system_limit:
+            if not isAdmin():
+                echo "Please run as root. or start with --keep-os-limit "
+                quit(1)
+
+            try:
+                discard 0 == execShellCmd("sysctl -w fs.file-max=1000000")
+                var limit = RLimit(rlim_cur: 650000, rlim_max: 660000)
+                assert 0 == setrlimit(RLIMIT_NOFILE, limit)
+            except: # try may not be able to catch above exception, anyways
+                echo getCurrentExceptionMsg()
+                echo "Could not increase system max connection (file descriptors) limit."
+                echo "Please run as root. or start with --keep-os-limit "
+                quit(1)
+    else: discard
+    
 
 
 proc init*() =
@@ -387,16 +382,17 @@ proc init*() =
             quit "specify the mode!. iran or kharej?  --iran or --kharej"
 
 
-
-    if final_target_domain.isEmptyOrWhitespace():
-        echo "specify the sni for routing --sni:{domain}"
+    if cdn_domain.isEmptyOrWhitespace():
+        error "specify the cdn domain for routing --domain:{domain}"
         exit = true
     if password.isEmptyOrWhitespace():
-        echo "specify the password  --password:{something}"
+        error "specify the password  --password:{something}"
         exit = true
 
 
-    if exit: quit("Application did not start due to above logs.")
+    if exit: fatal "Application did not start due to above logs."; quit(1)
+
+    increaseSystemMaxFd()
 
     if terminate_secs != 0:
         sleepAsync(terminate_secs.secs).addCallback(
@@ -405,21 +401,22 @@ proc init*() =
             quit(0)
         )
 
-    let rs_capacity = 4400 + (noise_ratio * 4400)
-    random_str = newStringOfCap(rs_capacity); random_str.setLen(rs_capacity)
-    for i in 0..<random_str.len():
-        random_str[i] = rand(char.low .. char.high).char
-
-    final_target_ip = resolveIPv4(final_target_domain)
-    print "\n"
+    if cdn_ip.isEmptyOrWhitespace:
+        cdn_ip = resolveIPv4(cdn_domain)
+        info "Resolved", domain = cdn_domain , "points at:" , cdn_ip
 
     try:
         self_ip = getPrimaryIPAddr(dest = parseIpAddress("8.8.8.8"))
-    except:
+    except CatchableError as e:
+        error "Could not resolve self ip using IPv4."
+        info "retrying using v6 ..."
         try:
             self_ip = getPrimaryIPAddr(dest = parseIpAddress("2001:4860:4860::8888"))
         except CatchableError as e:
-            raise e
+            fatal "Could not resolve self ip using IPv6!"; quit(1)
+        
+    info "Resolved" `self ip` = self_ip
+    
 
     password_hash = $(secureHash(password))
     sh1 = hash(password_hash).uint32
@@ -430,7 +427,5 @@ proc init*() =
     sh5 = hash(sh4).uint8
     while sh5 <= 2.uint32 or sh5 >= 223.uint32:
         sh5 = hash(sh5).uint8
-
-
-    print password, password_hash, sh1, sh2, sh3, download_cons,upload_cons,connection_age
-    print "\n"
+    
+    info "Initialized"
