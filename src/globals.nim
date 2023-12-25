@@ -1,5 +1,7 @@
 import chronos
 import dns_resolve, hashes, pretty, parseopt, strutils, random, net, osproc, strformat
+import chronos/apps/http/[httpclient], stew/byteutils, json
+
 import checksums/sha1
 
 
@@ -58,12 +60,11 @@ var keep_system_limit* = false
 var accept_udp* = false
 var terminate_secs* = 0
 var automode = false
-
-# [Files]
-
-const autoCert* {.strdefine.}: string = "arzeshi ye mozdor"
-const autoPKey* {.strdefine.}: string = "arzeshi ye ahmagh"
-const autoDomain*{.strdefine.}: string = "arzeshi ye bipedar"
+const autoCert* {.strdefine.}: string = ""
+const autoPKey* {.strdefine.}: string = ""
+const autoDomain*{.strdefine.}: string = ""
+const autoApiToken{.strdefine.}: string = ""
+const autoZoneID{.strdefine.}: string = ""
 
 var cert*: string
 var pkey*: string
@@ -115,6 +116,33 @@ proc chooseRandomLPort(): Port =
 # 172.64.0.0/13
 # 131.0.72.0/22
 
+proc registerNewDomainToCF(domain: string, ip: string): Future[bool] {.async.} =
+    var secureSession = HttpSessionRef.new({HttpClientFlag.Http11Pipeline})
+    var url = getAddress(secureSession, &"https://api.cloudflare.com/client/v4/zones/{autoZoneID}/dns_records").get()
+    var headers = newseq[HttpHeaderTuple](len = 2)
+    headers[0] = ("Content-Type", "application/json")
+    headers[1] = ("Authorization", &"Bearer {autoApiToken}")
+    var body = fmt(r"""
+{
+  "content": "%ip%",
+  "name": "%domain%",
+  "proxied": true,
+  "type": "A",
+  "comment": "used for RTCF AutoConf",
+  "ttl": 1
+}
+""", '%', '%')
+    var req = HttpClientRequestRef.new(secureSession, url, MethodPost, HttpVersion11, {CloseConnection}, headers,
+                           body.toOpenArrayByte(0, body.high))
+    var result = await fetch(req)
+    # print string.fromBytes(result.data)
+    # print result.status
+    if result.status == 200:
+        return true
+    else:
+        var estr = $(parseJson(string.fromBytes(result.data))["errors"][0]["message"])
+        error "could not register the new domain to CloudFlare", code = result.status, details = estr
+        return false
 
 proc multiportSupported(): bool =
     when defined(windows) or defined(android):
@@ -138,7 +166,6 @@ proc multiportSupported(): bool =
             return false
 
         return true
-
 
 
 proc increaseSystemMaxFd() =
@@ -276,12 +303,14 @@ proc init*() =
                         except CatchableError as e:
                             fatal "could not read private-key file", error = e.name, msg = e.msg; quit(1)
                     of "auto":
-
-                        when autoPKey.isEmptyOrWhitespace:
-                            fatal "Auto mode is disabled since you compiled a version without providing the required values."
-                            quit(1)
+                        if (p.val.toLower == "on" or p.val.toLower == "true" or p.val.toLower == "yes"):
+                            when autoPKey.isEmptyOrWhitespace:
+                                fatal "Auto mode is disabled since you compiled a version without providing the required values."
+                                quit(1)
+                            else:
+                                automode = true
                         else:
-                            automode = true
+                            automode = off
 
                     of "password":
                         password = (p.val)
@@ -350,7 +379,7 @@ proc init*() =
             fatal "specify the mode!. iran or kharej?  --iran or --kharej"; quit(1)
 
 
-  
+
     if password.isEmptyOrWhitespace():
         fatal "specify the password", switch = "--password"
         exit = true
@@ -381,16 +410,35 @@ proc init*() =
 
     if not automode:
         if cdn_ip == zeroDefault(IpAddress):
-            cdn_ip = parseIpAddress resolveIPv4(cdn_domain)
-            info "Resolved", domain = cdn_domain, "points at:" = cdn_ip
+            try:
+                cdn_ip = parseIpAddress resolveIPv4(cdn_domain)
+                info "Resolved", domain = cdn_domain, "points at:" = cdn_ip
+            except:
+                fatal "The domain you provided could not be resolved to a ipv4"; quit(1)
+
     else:
-        let domain = $hash(self_ip) & "." & autoDomain
-        try:
-            cdn_ip = parseIpAddress resolveIPv4(domain)
-            info "Resolved", domain = "auto", "points at:"= cdn_ip
-        except CatchableError as e:
-            discard
-            # TODO: add domain
+        var already_registered = false
+        cdn_domain = $hash(self_ip) & "." & autoDomain
+        info "Auto Mode! syncing with CloudFlare..."
+        while true:
+            try:
+                cdn_ip = parseIpAddress resolveIPv4(cdn_domain)
+                info "Resolved CloudFlare domain", "points at:" = cdn_ip
+                doAssert cdn_ip == self_ip
+                break
+            except:
+                if not already_registered:
+                    let suc = waitFor registerNewDomainToCF(cdn_domain, $self_ip)
+                    if not suc:
+                        fatal "Registration to CloudFlare was unsuccessful!"; quit(1)
+                    info "registered to CloudFlare!"
+                    notice "Checking every 10 sec for cdn to update with new domain, plase wait..."
+                    already_registered = true
+                else:
+                    notice "domain not registered yet!, plase wait..."
+
+            waitFor sleepAsync(10.secs)
+
 
 
     password_hash = $(secureHash(password))

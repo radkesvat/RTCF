@@ -8,7 +8,7 @@
 import std/[strutils, sha1]
 import ".."/chronos/unittest2/asynctests
 import ".."/chronos,
-       ".."/chronos/apps/http/[httpserver, shttpserver, httpclient]
+      ".."/chronos/apps/http/[httpserver, shttpserver, httpclient]
 import stew/[byteutils, base10]
 
 {.used.}

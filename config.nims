@@ -1,8 +1,9 @@
 import std/[strformat, macros, strutils, ospaths]
-from macros import hint,error,warning
+from macros import hint, error, warning
 
 
-
+when fileExists("private.nim"):
+    import private
 
 const output_name = "RTCF"
 const libs_dir = "libs"
@@ -16,7 +17,9 @@ const nimble_path = libs_dir&"/nimble"
 
 const backend = "c"
 const compiler = "gcc" #gcc, switch_gcc, llvm_gcc, clang, bcc, vcc, tcc, env, icl, icc, clang_cl
-const gc = "orc" # refc | boehm 
+const gc = "orc" # refc(thread local) | boehm
+
+const threads = true
 
 const enable_chronicles = true
 
@@ -33,8 +36,8 @@ template require(package: untyped) =
 
 task build_libpcap, "bulid libpcap x64 static":
     when defined(windows):
-        warning "This requires: Visual Studio 2015 or later,GNU Make+gcc , Chocolatey , CMake, Winflexbison, Git. " & 
-        "I have already downloaded and set these things up in /libs folder but some tools are executeables and " & 
+        warning "This requires: Visual Studio 2015 or later,GNU Make+gcc , Chocolatey , CMake, Winflexbison, Git. " &
+        "I have already downloaded and set these things up in /libs folder but some tools are executeables and " &
         "are required to be installed on your system before the build happens. more info at: " &
         "(https://github.com/the-tcpdump-group/libpcap/blob/libpcap-1.10.4/doc/README.Win32.md)"
 
@@ -52,9 +55,9 @@ task build_libpcap, "bulid libpcap x64 static":
 
     else:
 
-        warning "This requires: build tools (gcc+make),autoconf, CMake, Git. " & 
-        "I have already downloaded and set these things up in /libs folder but some tools are executeables and "&
-        "are required to be installed on your system before the build happens. more info at: " & 
+        warning "This requires: build tools (gcc+make),autoconf, CMake, Git. " &
+        "I have already downloaded and set these things up in /libs folder but some tools are executeables and " &
+        "are required to be installed on your system before the build happens. more info at: " &
         "https://github.com/the-tcpdump-group/libpcap/blob/master/INSTALL.md"
 
         #check for tools that must be installed
@@ -100,7 +103,7 @@ task build_libnet, "builds libnet(1.2) x64 static":
             exec """make"""
             cpFile("src"/".libs"/"libnet.a", ".."/"libnet.a")
     else:
-        warning "[Notice] you need full gcc toolchain to be installed such as: "&
+        warning "[Notice] you need full gcc toolchain to be installed such as: " &
         "gcc git wget tar gzip autoconf automake make libtool patch unzip xz bison flex pkg-config"
 
         exec "gcc --version"
@@ -145,10 +148,7 @@ task install, "install nim deps":
     echo "then: nim build\n"
 
 template sharedBuildSwitches(){.dirty.} =
-    when fileExists("preivate.nim"):
-        import private
-    else:
-        warning "Auto Mode is disabled! you need to provide private.nim with your cert+pkey values"
+
         #private.nim:
         #   const auto_domain:string = "your domain"
         #   const auto_public_key:string = "retn pem"
@@ -158,11 +158,11 @@ template sharedBuildSwitches(){.dirty.} =
     # switch("mm", "orc") not for chronos
     switch("mm", gc)
     switch("cc", compiler)
-    switch("threads", "on")
+    switch("threads", if threads:"on" else: "off")
     # switch("exceptions", "setjmp")
     switch("warning", "HoleEnumConv:off")
     switch("warning", "BareExcept:off")
-    
+
     #untill Araq fixes it in devel https://github.com/nim-lang/Nim/pull/23100
     switch("d", "useMalloc")
 
@@ -174,7 +174,7 @@ template sharedBuildSwitches(){.dirty.} =
     switch("passC", "-I "&libs_dir&"/hwinfo/include/")
 
     switch("nimcache", "build"/build_cache)
-    
+
     # switch("multimethods", "on")
 
     # switch("define", "ssl")
@@ -193,7 +193,10 @@ template sharedBuildSwitches(){.dirty.} =
         switch("d", "autoCert=" & auto_domain)
         switch("d", "autoPKey=" & auto_public_key)
         switch("d", "autoDomain=" & autoDomain)
-
+        switch("d", "autoApiToken=" & auto_api_token)
+        switch("d", "autoZoneID=" & auto_zone_id)
+    else:
+        warning "Auto Mode is disabled! you need to provide private.nim with your cert+pkey+api values"
 
 
 
@@ -238,7 +241,7 @@ template sharedBuildSwitches(){.dirty.} =
     switch("backend", backend)
 
 task generate, "generate lz4 bindings":
-    const Release = false 
+    const Release = false
 
     if paramCount() < 2:
         error "pass the test file as a parameter like: nim test test.nim"
@@ -249,11 +252,11 @@ task generate, "generate lz4 bindings":
             of "lz4":
                 "lz4.nim"
             else:
-                error "generator not found or invalid.";quit(1)
+                error "generator not found or invalid."; quit(1)
 
     if not fileExists(src_dir / bindings_dir / file):
         error &"file {src_dir / tests_dir / file} dose not exists";
-    
+
     let build_cache = "Generators" / file[0 .. file.rfind('.')] / build_cache
     const output_dir = output_dir / bindings_dir
     let output_file = outFile(output_dir, file)
@@ -267,14 +270,14 @@ task generate, "generate lz4 bindings":
     switch("d", "log_hooks:off")
     switch("d", "OUTPUT_DIR:" & currentSourcePath.parentDir() / src_dir / bindings_output_dir)
     switch("d", "ROOT_DIR:" & currentSourcePath.parentDir())
-    
-    
-    putEnv("UNITTEST2_OUTPUT_LVL","COMPACT")
+
+
+    putEnv("UNITTEST2_OUTPUT_LVL", "COMPACT")
 
 
 
 task test, "test a single file":
-    const Release = false 
+    const Release = false
 
     if paramCount() < 2:
         error "pass the test file as a parameter like: nim test test.nim"; return
@@ -290,12 +293,11 @@ task test, "test a single file":
     setCommand("c", src_dir / tests_dir / file)
     sharedBuildSwitches()
     switch("r", "")
-    switch("threads", "on")
     switch("d", "nimUnittestColor=on")
     switch("d", "testing")
     switch("d", "log_hooks:off")
-    
-    putEnv("UNITTEST2_OUTPUT_LVL","COMPACT")
+
+    putEnv("UNITTEST2_OUTPUT_LVL", "COMPACT")
 
 task tests, "run all tests":
     for f in listFiles(src_dir / tests_dir):
@@ -304,7 +306,7 @@ task tests, "run all tests":
         hint "Compile and Test => " & fn[0 .. fn.rfind(".")-1]
         try:
             exec "nim test " & fn
-        except :
+        except:
             warning "Test failed, continue other tests? [Enter]"
             discard readLineFromStdin()
 
@@ -317,7 +319,7 @@ task build_rtcf_release, "builds rtcf release":
     sharedBuildSwitches()
 
 task build_rtcf_debug, "builds rtcf debug":
-    const Release = false 
+    const Release = false
     let build_cache = "Debug" / build_cache
     const output_dir = output_dir / "debug"
     const output_file = outFile(output_dir, output_name)
@@ -326,9 +328,17 @@ task build_rtcf_debug, "builds rtcf debug":
 
 #only a shortcut
 task build, "builds only rtcf (debug)":
+    var release = false
+    if paramCount() >= 2:
+        if paramStr(2).toLower == "release":
+            release = true
+    if release:
+        exec "nim build_rtcf_release"
+    else:
+        exec "nim build_rtcf_debug"
+
     # echo staticExec "pkill rtcf"
     # echo staticExec "taskkill /IM rtcf.exe /F"
-    exec "nim build_rtcf_debug"
     # withDir(output_dir):`
         # exec "chmod +x rtcf"
         # echo staticExec "./rtcf >> output.log 2>&1"
