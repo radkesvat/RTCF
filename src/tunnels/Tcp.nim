@@ -39,7 +39,7 @@ method init(self: TcpTunnel, name: string, store: Store, fakeupload_ratio: int){
     self.store = store
     self.header = TcpPacketFlag
 
-proc new*(t: typedesc[TcpTunnel], name: string = "TcpTunnel", store: Store, fakeupload_ratio: int = 0): TcpTunnel =
+proc newTcpTunnel*( name: string = "TcpTunnel", store: Store, fakeupload_ratio: int = 0): TcpTunnel =
     result = new TcpTunnel
     result.init(name, store, fakeupload_ratio)
     trace "Initialized", name

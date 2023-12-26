@@ -139,17 +139,15 @@ proc findCFPort(): Port =
         return 0.Port
 
 proc rightThread(threadID: int){.thread.} =
-    warn "LightThread spawend"
+    warn "RightThread spawend"
     var disp = getThreadDispatcher()
-    asyncSpawn right.run()
-    runForever()
+    waitFor right.run(threadID)
 
 
 proc leftThread(threadID: int){.thread.} =
     warn "LeftThread spawend"
     var disp = getThreadDispatcher()
-    asyncSpawn left.run()
-    runForever()
+    waitFor left.run(threadID)
 
 
 proc main() =
@@ -193,8 +191,8 @@ proc main() =
 
 
     proc singlethread() =
-        asyncSpawn left.run()
-        asyncSpawn right.run()
+        asyncSpawn left.run(1)
+        asyncSpawn right.run(1)
         runForever()
 
 
@@ -208,6 +206,7 @@ proc main() =
             createThread(threads[i], leftThread, i+1); pinToCpu[int](threads[i],4);inc i
             createThread(threads[i], rightThread, i+1); pinToCpu[int](threads[i],4);inc i
             threads_left -= 2
+        
         info "Waiting for spawend threads"
         joinThreads(threads)
         warn "All spawend threads have finished"

@@ -1,7 +1,6 @@
 # a box of stringviews, you take when you need, then put it back
 # why tho? because we can elide reallocates = faster runtime = less memory used
 import stringview, sequtils,random
-
 logScope:
     topic = "Store"
 
@@ -14,7 +13,7 @@ type Store* = ref object
     maxCap: int
     randomBuf:string 
 
-proc new*(t: typedesc[Store], cap = DefaultStoreCap): Store =
+proc newStore*(cap = DefaultStoreCap): Store =
     new result
     result.available = newSeqOfCap[Stringview](cap)
     result.available.setLen(cap)
@@ -31,14 +30,13 @@ proc new*(t: typedesc[Store], cap = DefaultStoreCap): Store =
 
 template requires(self: Store, count: int) =
     if self.available.len < count:
-        trace "Allocating again", wasleft = self.available.len, requested = count, increase_to = self.maxCap
+        warn "Allocating again", wasleft = self.available.len, requested = count, increase_to = self.maxCap*2
+        self.available.setLen(self.maxCap*2)
 
-        self.available.setLen(self.maxCap)
-
-        for i in self.available.len ..< self.maxCap:
+        for i in self.maxCap ..< self.maxCap*2:
             self.available[i] = newStringView(cap = DefaultStrvCap)
 
-
+        self.maxCap = self.maxCap*2
 
 proc pop*(self: Store): Stringview =
     self.requires 1

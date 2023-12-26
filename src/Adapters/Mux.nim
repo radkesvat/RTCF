@@ -15,7 +15,7 @@ logScope:
 
 
 type
-    Cid = uint16
+    Cid* = uint16
     Chan = AsyncChannel[StringView]
     CidNotExistBehaviour = enum
         nothing, create, sendclose
@@ -161,18 +161,18 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
 
                     of nothing: discard
     except CatchableError as e:
-        when e is CancelErrors:
+        if e.meansCancel():
             trace "readloop got canceled", name = e.name, msg = e.msg
             if not self.stopped: signal(self, both, close)
-        else: 
+        else:
             error "readloop got Exception", name = e.name, msg = e.msg
-            
+
             raise e
 
 
 
 method init(self: MuxAdapetr, name: string, master: AsyncChannel[Cid], store: Store, loc: Location,
-    cid: Cid): MuxAdapetr =
+    cid: Cid) {.raises: [].} =
     self.location = loc
     self.store = store
     self.masterChannel = master
@@ -180,8 +180,10 @@ method init(self: MuxAdapetr, name: string, master: AsyncChannel[Cid], store: St
     procCall init(Adapter(self), name, hsize = 0)
 
 
-proc start(self: MuxAdapetr) =
+method start(self: MuxAdapetr){.raises: [].} =
     {.cast(raises: []).}:
+        procCall start(Adapter(self))
+
         trace "starting"
         case self.location:
             of BeforeGfw:
@@ -205,7 +207,7 @@ proc start(self: MuxAdapetr) =
                         self.readloopFut = readloop(self, sendclose)
                         asyncSpawn self.acceptConnectionFut
                         asyncSpawn self.readloopFut
-                        
+
 
             of AfterGfw:
                 case self.side:
@@ -230,15 +232,15 @@ proc start(self: MuxAdapetr) =
                         self.selectedCon.dcp = addr globalTable[self.selectedCon.cid]
 
 
-proc new*(t: typedesc[MuxAdapetr], name: string = "MuxAdapetr", master: AsyncChannel[Cid], store: Store, loc: Location,
-    cid: Cid = 0): MuxAdapetr =
+proc newMuxAdapetr*(name: string = "MuxAdapetr", master: AsyncChannel[Cid], store: Store, loc: Location,
+    cid: Cid = 0): MuxAdapetr {.raises: [].} =
     result = new MuxAdapetr
     result.init(name, master, store, loc, cid)
     trace "Initialized new MuxAdapetr", name
 
 
 method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future[void] {.async.} =
-    debug "Write", adaptername = self.name, size = rp.len
+    debug "Write",  size = rp.len
     try:
         case self.location:
             of BeforeGfw:
@@ -270,16 +272,21 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
         self.stop; raise e
 
 method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
-    info "read", adaptername = self.name
     try:
-
         case self.location:
             of BeforeGfw:
                 case self.side:
                     of Side.Left:
+                        block test:
+                            await sleepAsync(1000)
+                            var nsv = self.store.pop()
+                            nsv.write("salam farmande!")
+                            return nsv
+
                         var size: uint16 = 0
                         var cid: uint16 = 0
                         var sv = await self.selectedCon.dcp.second.recv()
+
                         copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
                         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
                         assert self.selectedCon.cid == cid # ofcourse!
@@ -288,6 +295,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                             trace "closing read channel.", size
                             raise newException(CancelledError, message = "read close, size: " & $size)
 
+                        debug "read"
 
                         return sv
                     of Side.Right:
@@ -307,6 +315,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         if size.int > bytes:
                             trace "closing read channel.", size
                             raise newException(CancelledError, message = "read close, size: " & $size)
+                        info "read"
 
                         return sv
 
@@ -315,7 +324,6 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
 
 method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains = default) =
-    if sig == start: self.start()
 
     if sig == close or sig == stop:
         self.stop()
@@ -324,6 +332,8 @@ method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains 
         if not self.stopped: fatal "break through signal while still running?"; quit(1)
 
     procCall signal(Tunnel(self), dir, sig, chain)
+    
+    if sig == start: self.start()
 
 
 proc staticInit() =

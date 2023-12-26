@@ -1,5 +1,6 @@
 import tunnel, strutils, store
 import sequtils, chronos/transports/stream
+
 # This module unfortunately has global shared memory as part of its state
 
 logScope:
@@ -34,18 +35,20 @@ proc readloop(self: ConnectionAdapter){.async.} =
     try:
         while not socket.closed and not self.stopped:
             var sv = await procCall read(Tunnel(self), 1)
+            trace "write bytes to socket", count = sv.len
             if sv.len != await socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
+
     except CatchableError as e:
-        when e is CancelErrors:
+        if e.meansCancel():
             trace "readloop got canceled", name = e.name, msg = e.msg
-        else: 
+        else:
             error "readloop got Exception", name = e.name, msg = e.msg
             raise e
     if not self.stopped: signal(self, both, close)
-    
 
-  
+
+
 
 proc writeloop(self: ConnectionAdapter){.async.} =
     #read data from socket, write to chain
@@ -55,29 +58,32 @@ proc writeloop(self: ConnectionAdapter){.async.} =
             var sv = self.store.pop()
             sv.reserve(bufferSize)
             var actual = await socket.readOnce(sv.buf(), bufferSize)
+
             if actual == 0:
                 trace "close for 0 bytes read from socket"; break
+            else:
+                trace "read bytes from socket", count= actual
 
             sv.setLen(actual)
             await procCall write(Tunnel(self), sv)
-            
+
     except CatchableError as e:
-        when e is CancelErrors:
+        if e.meansCancel():
             trace "writeloop got canceled", name = e.name, msg = e.msg
-        else: 
+        else:
             error "writeloop got Exception", name = e.name, msg = e.msg
             raise e
     if not self.stopped: signal(self, both, close)
-    
 
-method init(self: ConnectionAdapter, name: string, socket: StreamTransport, store: Store): ConnectionAdapter =
+
+method init(self: ConnectionAdapter, name: string, socket: StreamTransport, store: Store){.raises: [].} =
+    procCall init(Adapter(self), name, hsize = 0)
     self.socket = socket
     self.store = store
-    procCall init(Adapter(self), name, hsize = 0)
 
 
 
-proc new*(t: typedesc[ConnectionAdapter], name: string = "ConnectionAdapter", socket: StreamTransport, store: Store): ConnectionAdapter =
+proc newConnectionAdapter*(name: string = "ConnectionAdapter", socket: StreamTransport, store: Store): ConnectionAdapter {.raises: [].} =
     result = new ConnectionAdapter
     result.init(name, socket, store)
     trace "Initialized", name
@@ -90,29 +96,31 @@ method read*(self: ConnectionAdapter, bytes: int, chain: Chains = default): Futu
     doAssert false, "you cannot call read of ConnectionAdapter!"
 
 
-
-proc start(self: ConnectionAdapter) =
+method start(self: ConnectionAdapter){.raises: [].} =
     {.cast(raises: []).}:
+        procCall start(Adapter(self))
+        trace "starting"
+
         self.readLoopFut = self.readloop()
         self.writeLoopFut = self.writeloop()
         asyncSpawn self.readLoopFut
         asyncSpawn self.writeLoopFut
-
-proc stop*(self: ConnectionAdapter)=
-    if not self.stopped :
+            
+proc stop*(self: ConnectionAdapter) =
+    if not self.stopped:
         trace "stopping"
         self.stopped = true
         cancelSoon self.readLoopFut
-        cancelSoon self.writeLoopFut     
+        cancelSoon self.writeLoopFut
         self.socket.close()
 
-method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
+method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
     if sig == close or sig == stop: self.stop()
-        
-    if sig == start: self.start()
-    
+
     if sig == breakthrough: doAssert self.stopped, "break through signal while still running?"
 
     procCall signal(Tunnel(self), dir, sig, chain)
+
+    if sig == start: self.start()
 
 

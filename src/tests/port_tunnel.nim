@@ -76,7 +76,7 @@ suite "Suite for testing Port Tunnel":
                 var pub_store = Store.new()
                 var a1 = TestAdapter.new(store = pub_store)
                 var a2 = TestAdapter.new(store = pub_store)
-                var p = PortTunnel.new(multiport = false,writeport = 443)
+                var p = newPortTunnel(multiport = false,writeport = 443)
                 a1.chain(p).chain(a2)
                 a1.signal(both,start)
                 await a1.startTest()

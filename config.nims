@@ -189,6 +189,7 @@ template sharedBuildSwitches(){.dirty.} =
     switch("d", "chronicles_timestamps=none")
     switch("import", src_dir/"helpers.nim")
 
+
     when declared(auto_domain):
         switch("d", "autoCert=" & auto_domain)
         switch("d", "autoPKey=" & auto_public_key)
@@ -328,6 +329,7 @@ task build_rtcf_debug, "builds rtcf debug":
 
 #only a shortcut
 task build, "builds only rtcf (debug)":
+    echo staticExec "taskkill /IM rtcf.exe /F"
     var release = false
     if paramCount() >= 2:
         if paramStr(2).toLower == "release":

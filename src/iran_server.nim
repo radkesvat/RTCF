@@ -551,7 +551,6 @@ proc start*(){.async.} =
     trackOldConnections(context.up_bounds, globals.connection_age)
     trackOldConnections(context.dw_bounds, globals.connection_age)
 
-
     trackDeadConnections(context.user_inbounds, globals.max_idle_timeout.uint, true, globals.max_idle_timeout div 2)
 
 

@@ -75,7 +75,7 @@ suite "Suite for testing Tcp Tunnel":
                 var pub_store = Store.new()
                 var a1 = TestAdapter.new(store = pub_store)
                 var a2 = TestAdapter.new(store = pub_store)
-                var p = TcpTunnel.new(store = pub_store)
+                var p = newTcpTunnel(store = pub_store)
                 a1.chain(p).chain(a2)
                 a1.signal(both, start)
                 await a1.startTest()

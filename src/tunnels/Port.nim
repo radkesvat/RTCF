@@ -31,7 +31,6 @@ const SOL_IP* = 0
 const SOL_IPV6* = 41
 
 type
-    Port = uint16
     PortTunnel* = ref object of Tunnel
         writePort: Port
         readPort: Port
@@ -45,7 +44,7 @@ method init(self: PortTunnel, name: string, multiport: bool, writeport: Port){.b
     self.writeport = writeport
     self.multiport = multiport
 
-proc new*(t: typedesc[PortTunnel], name: string = "PortTunnel", multiport: bool, writeport: int = 0): PortTunnel =
+proc newPortTunnel*( name: string = "PortTunnel", multiport: bool, writeport: int = 0): PortTunnel =
     result = new PortTunnel
     result.init(name, multiport, writeport.Port)
     trace "Initialized", name
@@ -62,7 +61,7 @@ method read*(self: PortTunnel, bytes: int, chain: Chains = default): Future[Stri
     copyMem(addr self.readPort, self.getReadHeader, self.hsize)
     trace "extracted ", header = $self.readPort, result = $self.readLine
 
-    if self.flag_readmode and self.writeport == 0: self.writeport = self.readPort
+    if self.flag_readmode and self.writeport == 0.Port: self.writeport = self.readPort
     return self.readLine
 
 
@@ -74,7 +73,7 @@ proc start(self: PortTunnel) =
         of left:
             #left means we should get the port from it for writing (only when multi port)
             if self.multiport:
-                assert self.writePort == 0
+                assert self.writePort == 0.Port
                 var sock = target.getRawSocket()
                 var objbuf = newString(len = 28)
                 var size = int(if isV4Mapped(sock.remoteAddress): 16 else: 28)

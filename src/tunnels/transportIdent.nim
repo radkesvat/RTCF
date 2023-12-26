@@ -35,7 +35,7 @@ method init(self: TransportIdentTunnel, name: string){.base, raises: [], gcsafe.
     procCall init(Tunnel(self), name, hsize = TransportIdentTunnelHeaderSize)
     self.header = 0x0
 
-proc new*(t: typedesc[TransportIdentTunnel], name: string = "TransportIdentTunnel"): TransportIdentTunnel =
+proc newTransportIdentTunnel*( name: string = "TransportIdentTunnel"): TransportIdentTunnel =
     result =  TransportIdentTunnel()
     result.init(name)
     trace "Initialized", name

@@ -30,14 +30,14 @@ proc stop*(self: WebsocketAdapter)=
         self.stopped = true
         asyncSpawn self.socket.close()
 
-method init(self: WebsocketAdapter, name: string, socket: WSSession, store: Store): WebsocketAdapter =
+method init(self: WebsocketAdapter, name: string, socket: WSSession, store: Store) =
     self.socket = socket
     self.store = store
     procCall init(Adapter(self), name, hsize = 0)
 
 
 
-proc new*(t: typedesc[WebsocketAdapter], name: string = "WebsocketAdapter", socket: WSSession, store: Store): WebsocketAdapter =
+proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, store: Store): WebsocketAdapter =
     result = new WebsocketAdapter
     result.init(name, socket, store)
     trace "Initialized", name

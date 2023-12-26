@@ -37,7 +37,7 @@ method init(self: UdpTunnel, name: string, store: Store, fakeupload_ratio: int){
     self.store = store
     self.header = UdpPacketFlag
 
-proc new*(t: typedesc[UdpTunnel], name: string = "UdpTunnel", store: Store, fakeupload_ratio: int = 0): UdpTunnel =
+proc newUdpTunnel*(name: string = "UdpTunnel", store: Store, fakeupload_ratio: int = 0): UdpTunnel =
     result = new UdpTunnel
     result.init(name, store, fakeupload_ratio)
     trace "Initialized", name

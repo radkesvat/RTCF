@@ -1,5 +1,4 @@
 import stew/byteutils, stringview, chronos, hashes
-from threading/channels import AsyncChannelError
 
 export byteutils, stringview, chronos, hashes
 
@@ -50,7 +49,11 @@ type
     InsufficientBytse* = ref object of FlowReadError
     FlowWriteError* = ref object of FlowError
 
-    CancelErrors* = AsyncChannelError or FlowError or CancelledError
+    
+    
+template meansCancel*(e: (CatchableError or ref CatchableError) ) : bool=
+    e.name == "AsyncChannelError" or e.name == "FlowError" or e.name == "CancelledError" or
+    e.name == "TransportUseClosedError"
 
 proc `==`*(x, y: InfoTag): bool {.borrow.}
 proc `$`*(x: InfoTag): string {.borrow.}
@@ -258,14 +261,16 @@ type
         location*: Location
         side*: Side
 
-method init*(self: Adapter, name: string, hsize: static[int]){.base, gcsafe.} =
+method init*(self: Adapter, name: string, hsize: static[int]){.gcsafe.} =
     procCall init(Tunnel(self), name, hsize = hsize)
 
-    if self.getNext != nil:
-        doAssert self.getPrev == nil, "Adapters rule broken, the chain is not finished."
+method start*(self: Adapter){.base, gcsafe.} =
+    if self.getNext == nil:
+        doAssert self.getPrev != nil,self.name & " Adapters rule broken, the chain is not finished."
         self.side = Side.Left
     else:
         self.side = Side.Right
+
 
 # method write*(self: Adapter, data: Rope): Future[void] =
     #     quit "Implenet Adapter write"

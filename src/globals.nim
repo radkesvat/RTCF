@@ -434,7 +434,7 @@ proc init*() =
                         await sleepAsync(100)
         waitFor sync()
 
-    echo "hehehe"
+
     password_hash = $(secureHash(password))
     sh1 = hash(password_hash).uint32
     sh2 = hash(sh1).uint32

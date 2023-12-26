@@ -13,8 +13,8 @@ logScope:
 
 
 
-proc run*() {.async.}= 
+proc run*(threadID: int) {.async.} =
     while true:
-        info "hi from right"
+        # info "hi from right"
         await sleepAsync(1000)
 
