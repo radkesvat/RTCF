@@ -117,6 +117,8 @@ task build_libnet, "builds libnet(1.2) x64 static":
             exec "make"
 
 task install, "install nim deps":
+    require jsony
+    require secp256k1
     require malebolgia
     require pretty
     require benchy
@@ -151,7 +153,7 @@ template sharedBuildSwitches(){.dirty.} =
 
         #private.nim:
         #   const auto_domain:string = "your domain"
-        #   const auto_public_key:string = "retn pem"
+        #   const auto_certificate:string = "retn pem"
         #   const auto_private_key:string = "pkey pem"
 
     switch("nimblePath", nimble_path&"/pkgs2")
@@ -191,8 +193,8 @@ template sharedBuildSwitches(){.dirty.} =
 
 
     when declared(auto_domain):
-        switch("d", "autoCert=" & auto_domain)
-        switch("d", "autoPKey=" & auto_public_key)
+        switch("d", "autoCert=" & auto_certificate)
+        switch("d", "autoPKey=" & auto_private_key)
         switch("d", "autoDomain=" & autoDomain)
         switch("d", "autoApiToken=" & auto_api_token)
         switch("d", "autoZoneID=" & auto_zone_id)

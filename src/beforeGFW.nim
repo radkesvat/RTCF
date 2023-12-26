@@ -189,7 +189,8 @@ proc main() =
         else:
             ruleCF_singlePort(globals.listen_port, cfl_port)
 
-
+    globals.cf_listen_port = cfl_port
+    
     proc singlethread() =
         asyncSpawn left.run(1)
         asyncSpawn right.run(1)
@@ -203,10 +204,10 @@ proc main() =
         while threads_left > 0:
             threads.setLen(threads.len+2)
             # TODO: Set the scheduling policy to SCHED_FIFO (real-time)
-            createThread(threads[i], leftThread, i+1); pinToCpu[int](threads[i],4);inc i
-            createThread(threads[i], rightThread, i+1); pinToCpu[int](threads[i],4);inc i
+            createThread(threads[i], leftThread, i+1); pinToCpu[int](threads[i], 4); inc i
+            createThread(threads[i], rightThread, i+1); pinToCpu[int](threads[i], 4); inc i
             threads_left -= 2
-        
+
         info "Waiting for spawend threads"
         joinThreads(threads)
         warn "All spawend threads have finished"

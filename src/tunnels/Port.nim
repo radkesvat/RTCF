@@ -44,9 +44,9 @@ method init(self: PortTunnel, name: string, multiport: bool, writeport: Port){.b
     self.writeport = writeport
     self.multiport = multiport
 
-proc newPortTunnel*( name: string = "PortTunnel", multiport: bool, writeport: int = 0): PortTunnel =
+proc newPortTunnel*( name: string = "PortTunnel", multiport: bool, writeport: Port = 0.Port): PortTunnel =
     result = new PortTunnel
-    result.init(name, multiport, writeport.Port)
+    result.init(name, multiport, writeport)
     trace "Initialized", name
 
 method write*(self: PortTunnel, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
@@ -90,8 +90,8 @@ proc start(self: PortTunnel) =
         else: discard
 
 method signal*(self: PortTunnel, dir: SigDirection, sig: Signals, chain: Chains = default) =
-    if signal == start: self.start()
     procCall signal(Tunnel(self), dir, sig, chain)
+    if signal == start: self.start()
 
 
 

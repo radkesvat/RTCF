@@ -1,7 +1,7 @@
 import chronos, chronos/transports/[datagram, ipnet], chronos/osdefs
 import adapters/[ws, connection, mux, connector]
-import tunnel,tunnels/[port, tcp, udp, transportident]
-import store,shared
+import tunnel, tunnels/[port, tcp, udp, transportident]
+import store, shared
 from globals import nil
 
 logScope:
@@ -11,16 +11,29 @@ var threadstore {.threadvar.}: Store
 
 proc startTcpListener(threadID: int) {.async.} =
     {.cast(gcsafe).}:
+        var foundpeer = false
         proc serveStreamClient(server: StreamServer,
                         transp: StreamTransport) {.async.} =
             try:
+                # if not foundpeer:
+                #     when helpers.hasThreadSupport:
+                #         lock(peerConnectedlock):
+                #             foundpeer = peerConnected
+                #     else:
+                #         foundpeer = peerConnected
+                # if not foundpeer:
+                #     error "user connection but no foreign server connected yet!, closing..."
+                #     transp.close();return
+
                 let address = transp.remoteAddress()
                 trace "Got connection", form = address
                 block spawn:
                     var con_adapter = newConnectionAdapter(socket = transp, store = threadstore)
-                    var mux_adapter = newMuxAdapetr(master = masterChannel,store = threadstore,loc = BeforeGfw)
-                    con_adapter.chain(mux_adapter)
-                    con_adapter.signal(both,start)
+                    var port_tunnel = newPortTunnel(multiport = globals.multi_port, writeport = globals.listen_port)
+                    var tcp_tunnel = newTcpTunnel(store = threadstore, fakeupload_ratio = 0)
+                    var mux_adapter = newMuxAdapetr(master = masterChannel, store = threadstore, loc = BeforeGfw)
+                    con_adapter.chain(port_tunnel).chain(tcp_tunnel).chain(mux_adapter)
+                    con_adapter.signal(both, start)
 
             except CatchableError as e:
                 error "handle client connection error", name = e.name, msg = e.msg

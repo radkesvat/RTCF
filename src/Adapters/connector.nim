@@ -58,6 +58,32 @@ proc connect(self: ConnectorAdapter) {.async.}=
                 if i != 4: notice "retrying ...", tries = i
                 else: error "so... giving up", tries = i
 
+proc writeloop(self: ConnectorAdapter){.async.} =
+    #read data from socket, write to chain
+    var socket = self.socket
+    try:
+        while not socket.closed and not self.stopped:
+            var sv = self.store.pop()
+            sv.reserve(bufferSize)
+            var actual = await socket.readOnce(sv.buf(), bufferSize)
+
+            if actual == 0:
+                trace "close for 0 bytes read from socket"; break
+            else:
+                trace "read bytes from socket", count= actual
+
+            sv.setLen(actual)
+            await procCall write(Tunnel(self), sv)
+
+    except CatchableError as e:
+        if e.meansCancel():
+            trace "writeloop got canceled", name = e.name, msg = e.msg
+        else:
+            error "writeloop got Exception", name = e.name, msg = e.msg
+            raise e
+    if not self.stopped: signal(self, both, close)
+
+
 # called when we are on the right side
 proc readloop(self: ConnectorAdapter){.async.} =
     #read data from chain, write to socket
@@ -84,32 +110,6 @@ proc readloop(self: ConnectorAdapter){.async.} =
     if not self.stopped: signal(self, both, close)
 
 
-
-
-proc writeloop(self: ConnectorAdapter){.async.} =
-    #read data from socket, write to chain
-    var socket = self.socket
-    try:
-        while not socket.closed and not self.stopped:
-            var sv = self.store.pop()
-            sv.reserve(bufferSize)
-            var actual = await socket.readOnce(sv.buf(), bufferSize)
-
-            if actual == 0:
-                trace "close for 0 bytes read from socket"; break
-            else:
-                trace "read bytes from socket", count= actual
-
-            sv.setLen(actual)
-            await procCall write(Tunnel(self), sv)
-
-    except CatchableError as e:
-        if e.meansCancel():
-            trace "writeloop got canceled", name = e.name, msg = e.msg
-        else:
-            error "writeloop got Exception", name = e.name, msg = e.msg
-            raise e
-    if not self.stopped: signal(self, both, close)
 
 
 method init(self: ConnectorAdapter, name: string, isMultiPort:bool,targetIp:IpAddress,targetPort:Port, store: Store){.raises: [].} =

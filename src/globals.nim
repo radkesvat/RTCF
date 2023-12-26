@@ -34,6 +34,7 @@ var noise_ratio*: uint = 0
 # [Routes]
 var listen_addr* = "::"
 var listen_port*: Port = 0.Port
+var cf_listen_port*: Port = 0.Port
 var next_route_addr* = ""
 var next_route_port*: Port = 0.Port
 # var iran_addr* = ""
