@@ -16,7 +16,7 @@ var threadstore {.threadvar.}: Store
 proc handle(request: HttpRequest) {.async.} =
     trace "Handling request:", uri = request.uri.path
 
-    if "/ws" & globals.sh1 != request.path:
+    if  request.uri.path != "/ws" & $globals.sh1:
         request.stream.close()
         warn "rejected websocket connection, password mismatch!"
         
@@ -25,23 +25,24 @@ proc handle(request: HttpRequest) {.async.} =
         let server = WSServer.new(factories = [deflateFactory])
         let ws = await server.handleRequest(request)
         if ws.readyState != Open:
-        error "Failed to open websocket connection"
-        return
+            error "Failed to open websocket connection"
+            return
 
         trace "Websocket handshake completed"
+
         while ws.readyState != ReadyState.Closed:
-        let recvData = await ws.recvMsg()
-        trace "Client Response: ", size = recvData.len, binary = ws.binary
+            let recvData = await ws.recvMsg()
+            trace "Client Response: ", size = recvData.len, binary = ws.binary
 
-        if ws.readyState == ReadyState.Closed:
-            # if session already terminated by peer,
-            # no need to send response
-            break
+            if ws.readyState == ReadyState.Closed:
+                # if session already terminated by peer,
+                # no need to send response
+                break
 
-        await ws.send(recvData,
-            if ws.binary: Opcode.Binary else: Opcode.Text)
+            await ws.send(recvData,
+                if ws.binary: Opcode.Binary else: Opcode.Text)
 
-    except WebSocketError as exc:
+    except WebSocketError as e:
         error "Websocket error", name = e.name, msg = e.msg
 
 
