@@ -59,7 +59,7 @@ method write*(self: PortTunnel, data: StringView, chain: Chains = default): Futu
 method read*(self: PortTunnel, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     setReadHeader(self, await procCall read(Tunnel(self), bytes+self.hsize))
     copyMem(addr self.readPort, self.getReadHeader, self.hsize)
-    trace "extracted ", header = $self.readPort, result = $self.readLine
+    trace "extracted ", header = $self.readPort
 
     if self.flag_readmode and self.writeport == 0.Port: self.writeport = self.readPort
     return self.readLine

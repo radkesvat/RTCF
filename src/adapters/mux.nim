@@ -321,7 +321,7 @@ proc newMuxAdapetr*(name: string = "MuxAdapetr", master: AsyncChannel[Cid], stor
 
 
 method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future[void] {.async.} =
-    debug "Write", size = rp.len, data = toOpenArrayByte(rp)
+    debug "Write", size = rp.len
     try:
         case self.location:
             of BeforeGfw:
