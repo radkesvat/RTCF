@@ -9,8 +9,8 @@ globals.init()
 
 if globals.mode == globals.RunMode.iran:
     beforeGFW.start()
-# else:
-#     afterGFW.start()
+else:
+    afterGFW.start()
 
 
 

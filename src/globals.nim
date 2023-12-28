@@ -260,11 +260,11 @@ proc init*() =
                     of "iran-ip":
                         iran_ip = parseIpAddress(p.val)
 
-                    of "iran_port":
+                    of "iran-port":
                         try:
                             iran_port = parseInt(p.val).Port
                         except:
-                            fatal "could not parse iran_port", given = p.val; quit(1)
+                            fatal "could not parse iran-port", given = p.val; quit(1)
 
 
                     of "domain":
