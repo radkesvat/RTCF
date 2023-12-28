@@ -61,10 +61,10 @@ template globalTableHas(id: Cid): bool = not (isNil(globalTable[id].first) or is
 proc stop*(self: MuxAdapetr) =
     proc flush(chan: Chan, store: Store){.async.} =
         while true:
-            {.cast(raises: []),gcsafe.}:
+            {.cast(raises: []), gcsafe.}:
                 var v = await chan.recv()
                 if v == nil: chan.close(); chan.close(); break else: store.reuse v
-                
+
 
 
     if not self.stopped:
@@ -104,7 +104,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
 
         except AsyncChannelError as e:
             warn "HandleCid closed, phase raed", msg = e.name, cid = cid
-            {.cast(raises: []),gcsafe.}:
+            {.cast(raises: []), gcsafe.}:
                 globalTable[cid].first.close()
                 globalTable[cid].first.close()
                 var copy = globalTable[cid].second
@@ -198,6 +198,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             else:
                 case whenNotFound:
                     of create:
+                        notice "sending create!", cid = cid
                         self.masterChannel.sendSync cid
                         # 1 or 2 time moving to event loop must be much faster than waiting and also enough
                         await sleepAsync(1)
@@ -205,6 +206,8 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         for i in 0 .. 100:
                             if globalTableHas cid:
                                 await globalTable[cid].second.send move data
+                                notice "data is written to created channel", cid = cid
+
                                 return
                             await sleepAsync(20)
                         # This  never happen, so quit if that actually happend to catch bug
@@ -284,7 +287,6 @@ method start(self: MuxAdapetr){.raises: [].} =
                     of Side.Left:
                         # left mode, we have been created by right Mux
                         # we find our channels,write and read to it
-                        doAssert(self.selectedCon.cid != 0)
                         doAssert(not globalTableHas self.selectedCon.cid)
                         globalTable[self.selectedCon.cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
                         globalTable[self.selectedCon.cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
@@ -321,10 +323,8 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
                         var total_len = rp.len.uint16
                         rp.shiftl SizeHeaderLen
                         rp.write(total_len)
-
                         rp.shiftl CidHeaderLen
                         rp.write(self.selectedCon.cid)
-
                         await self.selectedCon.dcp.first.send(rp)
 
                     of Side.Right:
@@ -334,11 +334,14 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
             of AfterGfw:
                 case self.side:
                     of Side.Left:
+                        var total_len = rp.len.uint16
                         rp.shiftl SizeHeaderLen
-                        rp.write(rp.len.uint16)
+                        rp.write(total_len)
                         rp.shiftl CidHeaderLen
                         rp.write(self.selectedCon.cid)
+                        trace "do write"
                         await self.selectedCon.dcp.first.send(rp)
+                        trace "written"
                     of Side.Right:
                         doAssert false, "this will not happen"
 
@@ -389,7 +392,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
                         assert self.selectedCon.cid == cid # ofcourse!
                         assert size.int == sv.len # full packet must be received here
-                        if size.int > bytes:
+                        if size.int < bytes:
                             trace "closing read channel.", size
                             raise newException(CancelledError, message = "read close, size: " & $size)
                         info "read"
@@ -405,6 +408,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
 
 method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains = default) {.raises: [].} =
+    procCall signal(Tunnel(self), dir, sig, chain)
 
     if sig == close or sig == stop:
         self.stop()
@@ -412,7 +416,6 @@ method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains 
     if sig == breakthrough:
         if not self.stopped: fatal "break through signal while still running?"; quit(1)
 
-    procCall signal(Tunnel(self), dir, sig, chain)
 
     if sig == start: self.start()
 

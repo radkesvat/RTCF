@@ -55,7 +55,7 @@ type
 # template meansCancel*(e: (CatchableError or ref CatchableError)): bool =
 #     e.name == "AsyncChannelError" or e.name == "FlowError" or e.name == "CancelledError" or
 #     e.name == "TransportUseClosedError" or e.name == "FlowCloseError" or e.name == "FlowReadError" or
-#     e.name == "InsufficientBytse" or e.name == "FlowWriteError" 
+#     e.name == "InsufficientBytse" or e.name == "FlowWriteError"
 
 proc `==`*(x, y: InfoTag): bool {.borrow.}
 proc `$`*(x: InfoTag): string {.borrow.}
@@ -156,17 +156,17 @@ proc findByName*(self: Tunnel, target: string or Hash, dir: SigDirection, chain:
                 res = self.ties[chain].prev.findByName(target, left, chain)
             res
 
-proc findByType*(self: Tunnel, target: typedesc, dir: SigDirection, chain: Chains = default): tuple[t: target, s: SigDirection] =
+method findByType*(self: Tunnel, target: typedesc, dir: SigDirection, chain: Chains = default): tuple[t: target, s: SigDirection]{.base, gcsafe.} =
     case dir:
         of left:
             if self.ties[chain].prev != nil:
-                if self.ties[chain].prev is target: return (target(self.ties[chain].prev), left)
-                else: self.ties[chain].prev.findByType(target, dir, chain)
+                if self.ties[chain].prev of target: return (target(self.ties[chain].prev), left)
+                else: self.ties[chain].prev.findByType(target, left, chain)
             else: (nil, left)
         of right:
             if self.ties[chain].next != nil:
-                if self.ties[chain].next is target: return (target(self.ties[chain].next), right)
-                else: self.ties[chain].next.findByType(target, dir, chain)
+                if self.ties[chain].next of target: return (target(self.ties[chain].next), right)
+                else: self.ties[chain].next.findByType(target, right, chain)
             else: (nil, right)
         of both:
             var res: tuple[t: target, s: SigDirection]

@@ -52,22 +52,23 @@ proc connect(self: ConnectorAdapter):Future[bool] {.async.}=
             try:
                 var flags = {SocketFlags.TcpNoDelay, SocketFlags.ReuseAddr}
                 self.socket = await connect(target, flags = flags)
+                trace "connected to the target core"
                 return true
             except CatchableError as e:
                 error "could not connect TCP to the core! ", name = e.name, msg = e.msg
                 if i != 4: notice "retrying ...", tries = i
                 else: error "gauve up connecting to core", tries = i;return false
-                
+    else:
+        quit(1)            
 
 proc writeloop(self: ConnectorAdapter){.async.} =
     #read data from socket, write to chain
-    var socket = self.socket
     var sv: StringView = nil
     while not self.stopped:
         try:
             sv = self.store.pop()
             sv.reserve(bufferSize)
-            var actual = await socket.readOnce(sv.buf(), bufferSize)
+            var actual = await self.socket.readOnce(sv.buf(), bufferSize)
             if actual == 0:
                 trace "Writeloop read 0 !";
                 self.store.reuse move sv
@@ -104,7 +105,6 @@ proc writeloop(self: ConnectorAdapter){.async.} =
 
 proc readloop(self: ConnectorAdapter){.async.} =
     #read data from chain, write to socket
-    var socket = self.socket
     var sv: StringView = nil
     while not self.stopped:
         try:
@@ -120,7 +120,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
             quit(1)
 
 
-        if socket == nil:
+        if self.socket == nil:
             if await self.connect():
                 self.writeLoopFut = self.writeloop()
                 asyncSpawn self.writeLoopFut
@@ -130,7 +130,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
-            if sv.len != await socket.write(sv.buf, sv.len):
+            if sv.len != await self.socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
 
         except [CancelledError, FlowError, TransportError, AsyncStreamError]:
@@ -175,9 +175,7 @@ method start(self: ConnectorAdapter){.raises: [].} =
         trace "starting"
 
         self.readLoopFut = self.readloop()
-        self.writeLoopFut = self.writeloop()
         asyncSpawn self.readLoopFut
-        asyncSpawn self.writeLoopFut
             
 proc stop*(self: ConnectorAdapter) =
     proc breakCycle(){.async.} =
@@ -188,8 +186,8 @@ proc stop*(self: ConnectorAdapter) =
         trace "stopping"
         self.stopped = true
         cancelSoon self.readLoopFut
-        cancelSoon self.writeLoopFut
-        self.socket.close()
+        if not isNil(self.writeLoopFut): cancelSoon self.writeLoopFut
+        if not isNil(self.socket): self.socket.close()
         asyncSpawn breakCycle()
 
 method signal*(self: ConnectorAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =

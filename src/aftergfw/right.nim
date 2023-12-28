@@ -29,7 +29,7 @@ proc connect() {.async.} =
                         path = "/ws" & $globals.sh1,
                         factories = [deflateFactory] )
 
-            var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
+            var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
             var ws_adapter = newWebsocketAdapter(socket = ws, store = publicStore)
             mux_adapter.chain(ws_adapter)
             mux_adapter.signal(both, start)

@@ -19,10 +19,10 @@ logScope:
 #   This tunnel adds port header, finds the right value for the port
 #   and when Reading from it , it extcarcts port header and saves it
 #   and provide interface for other tunnel/adapters to get that port
-#   
-#   This tunnel requires ConnectionAdapter 
 #
-    
+#   This tunnel requires ConnectionAdapter
+#
+
 
 
 const SO_ORIGINAL_DST* = 80
@@ -44,7 +44,7 @@ method init(self: PortTunnel, name: string, multiport: bool, writeport: Port){.b
     self.writeport = writeport
     self.multiport = multiport
 
-proc newPortTunnel*( name: string = "PortTunnel", multiport: bool, writeport: Port = 0.Port): PortTunnel =
+proc newPortTunnel*(name: string = "PortTunnel", multiport: bool, writeport: Port = 0.Port): PortTunnel =
     result = new PortTunnel
     result.init(name, multiport, writeport)
     trace "Initialized", name
@@ -67,33 +67,36 @@ method read*(self: PortTunnel, bytes: int, chain: Chains = default): Future[Stri
 
 proc start(self: PortTunnel) =
     {.cast(raises: []).}:
+        trace "starting"
         var (target, dir) = self.findByType(ConnectionAdapter, both, Chains.default)
-        doAssert target != nil, "Port Tunnel could not find connection adapter on default chain!"
-        case dir:
-        of left:
-            #left means we should get the port from it for writing (only when multi port)
+        # doAssert target != nil, "Port Tunnel could not find connection adapter on default chain!"
+        # echo "found dir was: ", $dir
+        if target == nil:
+            #After gfw, port must first be read from the flow
+            self.flag_readmode = true
+            
+        else:
+            #Before GFW , when multi port = get port from socket ; else use writeport
             if self.multiport:
                 assert self.writePort == 0.Port
                 var sock = target.getRawSocket()
                 var objbuf = newString(len = 28)
                 var size = int(if isV4Mapped(sock.remoteAddress): 16 else: 28)
                 let sol = int(if isV4Mapped(sock.remoteAddress): SOL_IP else: SOL_IPV6)
-                if not getSockOpt(sock.fd, sol, int(SO_ORIGINAL_DST),cast[var pointer](addr objbuf[0]), size):
+                if not getSockOpt(sock.fd, sol, int(SO_ORIGINAL_DST), cast[var pointer](addr objbuf[0]), size):
                     trace "multiport failure getting origin port. !"
                     raise newException(AssertionDefect, "multiport failure getting origin port. !")
 
                 bigEndian16(addr self.writePort, addr objbuf[2])
-                trace "Multiport ",port = self.writePort
-        of right:
-            # hmm, the port is received when reading data
-            self.flag_readmode = true
-        else: discard
+                trace "Multiport ", port = self.writePort
+        
+
 
 method signal*(self: PortTunnel, dir: SigDirection, sig: Signals, chain: Chains = default) =
     procCall signal(Tunnel(self), dir, sig, chain)
-    if signal == start: self.start()
+    if sig == start: self.start()
 
 
 
-proc getReadPort*(self: PortTunnel):Port = self.readPort
+proc getReadPort*(self: PortTunnel): Port = self.readPort
 
