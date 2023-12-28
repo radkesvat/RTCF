@@ -130,7 +130,7 @@ task install, "install nim deps":
     require bearssl
     require httputils
     require unittest2
-    require &"""--passL:-L"{getCurrentDir() / libs_dir }/" futhark"""
+    # require &"""--passL:-L"{getCurrentDir() / libs_dir }/" futhark"""
 
     #remove chronos since we patched it, use our patch
     for d in listDirs nimble_path/"pkgs2":
