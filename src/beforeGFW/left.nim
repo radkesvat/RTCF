@@ -1,5 +1,5 @@
 import chronos, chronos/transports/[datagram, ipnet], chronos/osdefs
-import adapters/[ws, connection, mux, connector]
+import adapters/[ws, connection, mux]
 import tunnel, tunnels/[port, tcp, udp, transportident]
 import store, shared
 from globals import nil
@@ -7,7 +7,6 @@ from globals import nil
 logScope:
     topic = "Iran LeftSide"
 
-var threadstore {.threadvar.}: Store
 
 proc startTcpListener(threadID: int) {.async.} =
     {.cast(gcsafe).}:
@@ -15,23 +14,23 @@ proc startTcpListener(threadID: int) {.async.} =
         proc serveStreamClient(server: StreamServer,
                         transp: StreamTransport) {.async.} =
             try:
-                # if not foundpeer:
-                #     when helpers.hasThreadSupport:
-                #         lock(peerConnectedlock):
-                #             foundpeer = peerConnected
-                #     else:
-                #         foundpeer = peerConnected
-                # if not foundpeer:
-                #     error "user connection but no foreign server connected yet!, closing..."
-                #     transp.close();return
+                if not foundpeer:
+                    when helpers.hasThreadSupport:
+                        lock(peerConnectedlock):
+                            foundpeer = peerConnected
+                    else:
+                        foundpeer = peerConnected
+                if not foundpeer:
+                    error "user connection but no foreign server connected yet!, closing..."
+                    transp.close();return
 
                 let address = transp.remoteAddress()
                 trace "Got connection", form = address
                 block spawn:
-                    var con_adapter = newConnectionAdapter(socket = transp, store = threadstore)
+                    var con_adapter = newConnectionAdapter(socket = transp, store = publicStore)
                     var port_tunnel = newPortTunnel(multiport = globals.multi_port, writeport = globals.listen_port)
-                    var tcp_tunnel = newTcpTunnel(store = threadstore, fakeupload_ratio = 0)
-                    var mux_adapter = newMuxAdapetr(master = masterChannel, store = threadstore, loc = BeforeGfw)
+                    var tcp_tunnel = newTcpTunnel(store = publicStore, fakeupload_ratio = 0)
+                    var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
                     con_adapter.chain(port_tunnel).chain(tcp_tunnel).chain(mux_adapter)
                     con_adapter.signal(both, start)
 
@@ -58,7 +57,6 @@ proc startTcpListener(threadID: int) {.async.} =
 
 proc run*(thread: int) {.async.} =
     await sleepAsync(200)
-    threadstore = newStore()
     # if globals.accept_udp:
     #     info "Mode Iran (Tcp + Udp)"
     # else:

@@ -37,7 +37,7 @@ var listen_port*: Port = 0.Port
 var cf_listen_port*: Port = 0.Port
 var next_route_addr* = ""
 var next_route_port*: Port = 0.Port
-# var iran_addr* = ""
+var iran_ip*: IpAddress
 var cdn_port*: Port = 0.Port
 var cdn_domain*: string
 var cdn_ip*: IpAddress
@@ -72,7 +72,8 @@ const autoDomain*{.strdefine.}: string = ""
 const autoApiToken{.strdefine.}: string = ""
 const autoZoneID{.strdefine.}: string = ""
 
-var threadsCount*: uint = when hasThreadSupport: cpuinfo.countProcessors().uint else: 1
+# var threadsCount*: uint = when hasThreadSupport: cpuinfo.countProcessors().uint else: 1
+var threadsCount*: uint = when hasThreadSupport: 2 else: 1
 
 
 # [multiport]
@@ -257,8 +258,8 @@ proc init*() =
                                 quit(1)
                             multi_port = true
 
-                    # of "iran-ip":
-                    #     iran_addr = (p.val)
+                    of "iran-ip":
+                        iran_ip = parseIpAddress(p.val)
 
                     of "cdn-port":
                         try:
@@ -407,34 +408,53 @@ proc init*() =
                 info "Resolved", domain = cdn_domain, "points at:" = cdn_ip
             except:
                 fatal "The domain you provided could not be resolved to a ipv4"; quit(1)
-
     else:
-        var already_registered = false
-        cdn_domain = $hash(self_ip) & "." & autoDomain
-        info "Auto Mode! syncing with CloudFlare..."
-        proc sync(){.async.} =
-            {.cast(gcsafe).}:
-                while true:
-                    try:
-                        cdn_ip = parseIpAddress resolveIPv4(cdn_domain)
-                        info "Resolved CloudFlare domain", "points at:" = cdn_ip
-                        break
-                    except:
-                        if not already_registered:
-                            # let suc = waitFor registerNewDomainToCF(cdn_domain, $self_ip)
-                            let suc = await registerNewDomainToCF(cdn_domain, "1.2.4.5")
-                            when defined release: macros.error "you forgot to uncomment!"; quit(1)
-                            if not suc:
-                                fatal "Registration to CloudFlare was unsuccessful!"; quit(1)
-                            info "registered to CloudFlare!"
-                            notice "Checking every 100 ms for cdn to update with new domain, plase wait..."
-                            already_registered = true
+        case mode:
+            of RunMode.kharej:
+                cdn_domain = $hash(iran_ip) & "." & autoDomain
+                info "Auto Mode! syncing with CloudFlare..."
+                info "Please make sure tunnel is started at iran server"
+                proc sync(){.async.} =
+                    {.cast(gcsafe).}:
+                        while true:
+                            try:
+                                cdn_ip = parseIpAddress resolveIPv4(cdn_domain)
+                                info "Resolved CloudFlare domain", "points at:" = cdn_ip
+                                break
+                            except:
+                                notice "domain not registered yet!, plase wait..."
+                                await sleepAsync(250)
 
-                        else:
-                            notice "domain not registered yet!, plase wait..."
-                        await sleepAsync(100)
-        waitFor sync()
+                waitFor sync()
 
+            of RunMode.iran:
+                var already_registered = false
+                cdn_domain = $hash(self_ip) & "." & autoDomain
+                info "Auto Mode! syncing with CloudFlare..."
+                proc sync(){.async.} =
+                    {.cast(gcsafe).}:
+                        while true:
+                            try:
+                                cdn_ip = parseIpAddress resolveIPv4(cdn_domain)
+                                info "Resolved CloudFlare domain", "points at:" = cdn_ip
+                                break
+                            except:
+                                if not already_registered:
+                                    # let suc = waitFor registerNewDomainToCF(cdn_domain, $self_ip)
+                                    let suc = await registerNewDomainToCF(cdn_domain, "1.2.4.5")
+                                    # when defined release: macros.error "you forgot to uncomment!"; quit(1)
+                                    if not suc:
+                                        fatal "Registration to CloudFlare was unsuccessful!"; quit(1)
+                                    info "registered to CloudFlare!"
+                                    notice "Checking every 100 ms for cdn to update with new domain, plase wait..."
+                                    already_registered = true
+
+                                else:
+                                    notice "domain not registered yet!, plase wait..."
+                                await sleepAsync(100)
+                waitFor sync()
+
+            else:discard
 
     password_hash = $(secureHash(password))
     sh1 = hash(password_hash).uint32

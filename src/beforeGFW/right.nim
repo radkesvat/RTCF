@@ -11,14 +11,14 @@ logScope:
 
 
 
-var threadstore {.threadvar.}: Store
-
 proc handle(request: HttpRequest) {.async.} =
     trace "Handling request:", uri = request.uri.path
+    var address = request.stream.writer.tsource.remoteAddress()
 
     if  request.uri.path != "/ws" & $globals.sh1:
         request.stream.close()
         warn "rejected websocket connection, password mismatch!"
+        return
         
     try:
         let deflateFactory = deflateFactory()
@@ -28,19 +28,15 @@ proc handle(request: HttpRequest) {.async.} =
             error "Failed to open websocket connection"
             return
 
-        trace "Websocket handshake completed"
+        # trace "Websocket handshake completed"
+        trace "Got Websocket connection", form = address
 
-        while ws.readyState != ReadyState.Closed:
-            let recvData = await ws.recvMsg()
-            trace "Client Response: ", size = recvData.len, binary = ws.binary
+        var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
+        var ws_adapter = newWebsocketAdapter(socket = ws, store = publicStore)
+        mux_adapter.chain(ws_adapter)
+        mux_adapter.signal(both, start)
 
-            if ws.readyState == ReadyState.Closed:
-                # if session already terminated by peer,
-                # no need to send response
-                break
 
-            await ws.send(recvData,
-                if ws.binary: Opcode.Binary else: Opcode.Text)
 
     except WebSocketError as e:
         error "Websocket error", name = e.name, msg = e.msg
@@ -55,19 +51,17 @@ proc startWebsocketServer(threadID: int) {.async.} =
 
         
         var server = 
-            HttpServer.create(initTAddress("127.0.0.1:8888"), flags = socketFlags)
-        
-        # TlsHttpServer.create(
-        #     address = initTAddress(globals.listen_addr,globals.cf_listen_port),
-        #     tlsPrivateKey = TLSPrivateKey.init(globals.pkey),
-        #     tlsCertificate = TLSCertificate.init(globals.cert),
-        #     flags = socketFlags)
+            # HttpServer.create(initTAddress("127.0.0.1:8888"), flags = socketFlags) 
+            TlsHttpServer.create(
+                address = initTAddress(globals.listen_addr,globals.cf_listen_port),
+                tlsPrivateKey = TLSPrivateKey.init(globals.pkey),
+                tlsCertificate = TLSCertificate.init(globals.cert),
+                flags = socketFlags)
        
 
         proc accepts() {.async, raises: [Defect].} =
             while true:
                 try:
-                    echo "here"
                     let req = await server.accept()
                     await req.handle()
                 except CatchableError as e:
@@ -82,7 +76,6 @@ proc startWebsocketServer(threadID: int) {.async.} =
 
 proc run*(thread: int) {.async.} =
     await sleepAsync(200)
-    threadstore = newStore()
     # if globals.accept_udp:
     #     info "Mode Iran (Tcp + Udp)"
     # else:

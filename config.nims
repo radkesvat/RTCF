@@ -202,10 +202,11 @@ template sharedBuildSwitches(){.dirty.} =
         warning "Auto Mode is disabled! you need to provide private.nim with your cert+pkey+api values"
 
 
-
-
+    
+    switch("d", "chronicles_disabled_topics=websock")
+ 
     when Release:
-        switch("d", "chronicles_disabled_topics=websocket")
+        
         switch("d", "chronicles_log_level=INFO")
 
 
@@ -238,6 +239,9 @@ template sharedBuildSwitches(){.dirty.} =
     else:
         switch("d", "debug")
         switch("d", "chronicles_log_level=TRACE")
+        switch("g")
+        switch("d","debuginfo")
+        switch("debugger", "native")
 
     switch("outdir", output_dir)
     switch("out", output_file)

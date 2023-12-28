@@ -2,9 +2,10 @@ import strutils
 
 import chronos/[handles, transport,threadsync]
 
-const hasThreadSupport* = compileOption("threads")
+const hasThreadSupport = compileOption("threads")
 when hasThreadSupport:
   import locks
+
 
 type
   RawAsyncChannelImpl {.pure, final.} = object
@@ -27,20 +28,25 @@ proc initLocks(rchan: RawAsyncChannel) {.inline.} =
     initLock(rchan.lock)
   else:
     discard
-  rchan.eventNotEmpty = ThreadSignalPtr.new.tryGet()
+  rchan.eventNotEmpty = ThreadSignalPtr.new().value()
   if rchan.maxItems > 0:
-    rchan.eventNotFull = ThreadSignalPtr.new().tryGet()
+    rchan.eventNotFull = ThreadSignalPtr.new().value()
+
+proc releaseLock(rchan: RawAsyncChannel) {.inline.} 
 
 proc deinitLocks(rchan: RawAsyncChannel) {.inline.} =
   ## Deinitialize and close OS locks.
-  when hasThreadSupport:
-    deinitLock(rchan.lock)
-  else:
-    discard
+
 
   discard close(rchan.eventNotEmpty)
   if rchan.maxItems > 0:
     discard close(rchan.eventNotFull)
+  rchan.releaseLock()
+
+  when hasThreadSupport:
+    deinitLock(rchan.lock)
+  else:
+    discard
 
 proc acquireLock(rchan: RawAsyncChannel) {.inline.} =
   ## Acquire lock in multi-threaded mode and do nothing in
@@ -101,7 +107,8 @@ proc close*[Msg](chan: AsyncChannel[Msg]) =
     deallocShared(cast[pointer](chan))
   else:
     dec(chan.refCount)
-  chan.releaseLock()
+    chan.releaseLock()
+
 
 proc `$`*[Msg](chan: AsyncChannel[Msg]): string =
   ## Dump channel ``chan`` debugging information as string.
@@ -150,30 +157,30 @@ proc send*[Msg](chan: AsyncChannel[Msg], msg: Msg) {.async.} =
   ## Send message ``msg`` over channel ``chan``. This procedure will wait if
   ## internal channel queue is full.
   chan.acquireLock()
-  try:
-    if chan.refCount == 0:
-      raiseChannelClosed()
+  if chan.refCount == 0:
+    raiseChannelClosed()
 
-    if chan.maxItems > 0:
-      # Wait until count is less then `maxItems`.
-      while chan.count >= chan.maxItems:
-        chan.releaseLock()
-        let failed = 
-          try: 
-            await chan.eventNotFull.wait()
-            false
-          except: 
-            true
-        chan.acquireLock()
-        if failed:
-          raiseChannelFailed()
+  if chan.maxItems > 0:
+    # Wait until count is less then `maxItems`.
+    while chan.count >= chan.maxItems:
+      chan.releaseLock()
+      # let failed = 
+      #   try: 
+      #     await chan.eventNotFull.wait()
+      #     false
+      #   except: 
+      #     true
+      await chan.eventNotFull.wait()
+      chan.acquireLock()
+      # if failed:
+      #   raiseChannelFailed()
          
 
-    rawSend(chan, unsafeAddr msg, sizeof(Msg))
-    discard chan.eventNotEmpty.fireSync()
+  rawSend(chan, unsafeAddr msg, sizeof(Msg))
+  discard chan.eventNotEmpty.fireSync()
 
-  finally:
-    chan.releaseLock()
+  
+  chan.releaseLock()
 
 proc sendSync*[Msg](chan: AsyncChannel[Msg], msg: Msg) =
   ## Immediately send message ``msg`` over channel ``chan``. This procedure will
@@ -209,30 +216,30 @@ proc recv*[Msg](chan: AsyncChannel[Msg]): Future[Msg] {.async.} =
   ## it when it become available.
   var rmsg: Msg
   chan.acquireLock()
-  try:
-    if chan.refCount == 0:
-      raiseChannelClosed()
+  if chan.refCount == 0:
+    raiseChannelClosed()
 
-    while chan.count <= 0:
-      chan.releaseLock()
-      let failed = 
-        try: 
-          await chan.eventNotEmpty.wait()
-          false
-        except : 
-          true
-      chan.acquireLock()
-      if failed:
-        raiseChannelFailed()
-
-    rawRecv(chan, addr rmsg, sizeof(Msg))
-    result = rmsg
-
-    if chan.maxItems > 0:
-      discard chan.eventNotFull.fireSync()
-
-  finally:
+  while chan.count <= 0:
     chan.releaseLock()
+    await chan.eventNotEmpty.wait()
+    # let failed = 
+    #   try: 
+    #     await chan.eventNotEmpty.wait()
+    #     false
+    #   except : 
+    #     true
+    
+    chan.acquireLock()
+    # if failed:
+    #   raiseChannelFailed()
+
+  rawRecv(chan, addr rmsg, sizeof(Msg))
+  result = rmsg
+
+  if chan.maxItems > 0:
+    discard chan.eventNotFull.fireSync()
+
+  chan.releaseLock()
 
 proc recvSync*[Msg](chan: AsyncChannel[Msg]): Msg =
   ## Blocking receive message ``Msg`` from channel ``chan``.
@@ -253,5 +260,12 @@ proc recvSync*[Msg](chan: AsyncChannel[Msg]): Msg =
     if chan.maxItems > 0:
       discard chan.eventNotFull.fireSync()
 
+  finally:
+    chan.releaseLock()
+
+proc hasListener*[Msg](chan: AsyncChannel[Msg]): bool =
+  chan.acquireLock()
+  try:
+    return chan.refCount > 0
   finally:
     chan.releaseLock()

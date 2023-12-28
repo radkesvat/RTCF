@@ -36,7 +36,7 @@ const
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
 
-proc connect(self: ConnectorAdapter) {.async.}=
+proc connect(self: ConnectorAdapter):Future[bool] {.async.}=
     assert self.socket == nil
     var (tident,_) = self.findByType(TransportIdentTunnel,right)
     doAssert tident != nil, "connector adapter could not locate TransportIdentTunnel! it is required"
@@ -52,62 +52,97 @@ proc connect(self: ConnectorAdapter) {.async.}=
             try:
                 var flags = {SocketFlags.TcpNoDelay, SocketFlags.ReuseAddr}
                 self.socket = await connect(target, flags = flags)
-
+                return true
             except CatchableError as e:
                 error "could not connect TCP to the core! ", name = e.name, msg = e.msg
                 if i != 4: notice "retrying ...", tries = i
-                else: error "so... giving up", tries = i
+                else: error "gauve up connecting to core", tries = i;return false
+                
 
 proc writeloop(self: ConnectorAdapter){.async.} =
     #read data from socket, write to chain
     var socket = self.socket
-    try:
-        while not socket.closed and not self.stopped:
-            var sv = self.store.pop()
+    var sv: StringView = nil
+    while not self.stopped:
+        try:
+            sv = self.store.pop()
             sv.reserve(bufferSize)
             var actual = await socket.readOnce(sv.buf(), bufferSize)
-
             if actual == 0:
-                trace "close for 0 bytes read from socket"; break
+                trace "Writeloop read 0 !";
+                self.store.reuse move sv
+                if not self.stopped: signal(self, both, close)
+                break
             else:
-                trace "read bytes from socket", count= actual
-
+                trace "Writeloop read", bytes = actual
             sv.setLen(actual)
-            await procCall write(Tunnel(self), sv)
 
-    except CatchableError as e:
-        if e.meansCancel():
-            trace "writeloop got canceled", name = e.name, msg = e.msg
-        else:
-            error "writeloop got Exception", name = e.name, msg = e.msg
-            raise e
-    if not self.stopped: signal(self, both, close)
+        except [CancelledError, TransportError]:
+            var e = getCurrentException()
+            trace "Writeloop Cancel, [Read]", msg = e.name
+            if not self.stopped: signal(self, both, close)
+            return
+        except CatchableError as e:
+            error "Writeloop Unexpected Error, [Read]", name = e.name, msg = e.msg
+            quit(1)
 
 
-# called when we are on the right side
+        try:
+            trace "Writeloop write", bytes = sv.len
+            await procCall write(Tunnel(self), move sv)
+
+        except [CancelledError, FlowError]:
+            var e = getCurrentException()
+            trace "Writeloop Cancel, [Write]", msg = e.name
+            if not self.stopped: signal(self, both, close)
+            return
+        except CatchableError as e:
+            error "Writeloop Unexpected Error, [Write]", name = e.name, msg = e.msg
+            quit(1)
+
+
+
 proc readloop(self: ConnectorAdapter){.async.} =
     #read data from chain, write to socket
     var socket = self.socket
-    try:
-        while not socket.closed and not self.stopped:
-            var sv = await procCall read(Tunnel(self), 1)
-            trace "write bytes to socket", count = sv.len
-            if socket == nil:
-                await self.connect()
+    var sv: StringView = nil
+    while not self.stopped:
+        try:
+            sv = await procCall read(Tunnel(self), 1)
+            trace "Readloop Read", bytes = sv.len
+        except [CancelledError, FlowError]:
+            var e = getCurrentException()
+            warn "Readloop Cancel, [Read]", msg = e.name
+            if not self.stopped: signal(self, both, close)
+            return
+        except CatchableError as e:
+            error "Readloop Unexpected Error, [Read]", name = e.name, msg = e.msg
+            quit(1)
+
+
+        if socket == nil:
+            if await self.connect():
                 self.writeLoopFut = self.writeloop()
                 asyncSpawn self.writeLoopFut
+            else:
+                if not self.stopped: signal(self, both, close)
+                return
 
+        try:
+            trace "Readloop write to socket", count = sv.len
             if sv.len != await socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
 
-    except CatchableError as e:
-        if e.meansCancel():
-            trace "readloop got canceled", name = e.name, msg = e.msg
-        else:
-            error "readloop got Exception", name = e.name, msg = e.msg
-            raise e
-        
-    if not self.stopped: signal(self, both, close)
+        except [CancelledError, FlowError, TransportError, AsyncStreamError]:
+            var e = getCurrentException()
+            warn "Readloop Cancel, [Write]", msg = e.name
+            if not self.stopped: signal(self, both, close)
+            return
+        except CatchableError as e:
+            error "Readloop Unexpected Error, [Write]", name = e.name, msg = e.msg
+            quit(1)
+        finally:
+            self.store.reuse move sv
 
 
 
@@ -140,17 +175,22 @@ method start(self: ConnectorAdapter){.raises: [].} =
         trace "starting"
 
         self.readLoopFut = self.readloop()
+        self.writeLoopFut = self.writeloop()
         asyncSpawn self.readLoopFut
-        
-
+        asyncSpawn self.writeLoopFut
             
 proc stop*(self: ConnectorAdapter) =
+    proc breakCycle(){.async.} =
+        await sleepAsync(2000)
+        self.signal(both,breakthrough)
+
     if not self.stopped:
         trace "stopping"
         self.stopped = true
         cancelSoon self.readLoopFut
         cancelSoon self.writeLoopFut
         self.socket.close()
+        asyncSpawn breakCycle()
 
 method signal*(self: ConnectorAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
     if sig == close or sig == stop: self.stop()

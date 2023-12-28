@@ -1,4 +1,4 @@
-import threading/channels, std/locks
+import threading/channels, std/locks , store
 from adapters/mux import Cid
 export channels,Cid
 
@@ -21,3 +21,5 @@ template lock*(a: Lock; body: untyped) =
         finally:
             a.release()
 
+            
+var publicStore* = newStore()

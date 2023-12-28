@@ -32,55 +32,89 @@ proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.s
 proc readloop(self: ConnectionAdapter){.async.} =
     #read data from chain, write to socket
     var socket = self.socket
-    try:
-        while not socket.closed and not self.stopped:
-            var sv = await procCall read(Tunnel(self), 1)
-            trace "write bytes to socket", count = sv.len
+    var sv: StringView = nil
+    while not self.stopped:
+        try:
+            sv = await procCall read(Tunnel(self), 1)
+            trace "Readloop Read", bytes = sv.len
+        except [CancelledError, FlowError]:
+            var e = getCurrentException()
+            warn "Readloop Cancel, [Read]", msg = e.name
+            if not self.stopped: signal(self, both, close)
+            return
+        except CatchableError as e:
+            error "Readloop Unexpected Error, [Read]", name = e.name, msg = e.msg
+            quit(1)
+
+
+        try:
+            trace "Readloop write to socket", count = sv.len
             if sv.len != await socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
 
-    except CatchableError as e:
-        if e.meansCancel():
-            trace "readloop got canceled", name = e.name, msg = e.msg
-        else:
-            error "readloop got Exception", name = e.name, msg = e.msg
-            raise e
-    if not self.stopped: signal(self, both, close)
-
+        except [CancelledError, FlowError, TransportError, AsyncStreamError]:
+            var e = getCurrentException()
+            warn "Readloop Cancel, [Write]", msg = e.name
+            if not self.stopped: signal(self, both, close)
+            return
+        except CatchableError as e:
+            error "Readloop Unexpected Error, [Write]", name = e.name, msg = e.msg
+            quit(1)
+        finally:
+            self.store.reuse move sv
 
 
 
 proc writeloop(self: ConnectionAdapter){.async.} =
     #read data from socket, write to chain
     var socket = self.socket
-    try:
-        while not socket.closed and not self.stopped:
-            var sv = self.store.pop()
+    var sv: StringView = nil
+    while not self.stopped:
+        try:
+            sv = self.store.pop()
             sv.reserve(bufferSize)
             var actual = await socket.readOnce(sv.buf(), bufferSize)
-
             if actual == 0:
-                trace "close for 0 bytes read from socket"; break
+                trace "Writeloop read 0 !";
+                self.store.reuse move sv
+                if not self.stopped: signal(self, both, close)
+                break
             else:
-                trace "read bytes from socket", count= actual
-
+                trace "Writeloop read", bytes = actual
             sv.setLen(actual)
-            await procCall write(Tunnel(self), sv)
 
-    except CatchableError as e:
-        if e.meansCancel():
-            trace "writeloop got canceled", name = e.name, msg = e.msg
-        else:
-            error "writeloop got Exception", name = e.name, msg = e.msg
-            raise e
-    if not self.stopped: signal(self, both, close)
+        except [CancelledError, TransportError]:
+            var e = getCurrentException()
+            trace "Writeloop Cancel, [Read]", msg = e.name
+            if not self.stopped: signal(self, both, close)
+            return
+        except CatchableError as e:
+            error "Writeloop Unexpected Error, [Read]", name = e.name, msg = e.msg
+            quit(1)
+
+
+
+        try:
+            trace "Writeloop write", bytes = sv.len
+            await procCall write(Tunnel(self), move sv)
+
+        except [CancelledError, FlowError]:
+            var e = getCurrentException()
+            trace "Writeloop Cancel, [Write]", msg = e.name
+            if not self.stopped: signal(self, both, close)
+            return
+        except CatchableError as e:
+            error "Writeloop Unexpected Error, [Write]", name = e.name, msg = e.msg
+            quit(1)
+
+
 
 
 method init(self: ConnectionAdapter, name: string, socket: StreamTransport, store: Store){.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
     self.socket = socket
     self.store = store
-
+    assert not self.socket.closed()
 
 
 proc newConnectionAdapter*(name: string = "ConnectionAdapter", socket: StreamTransport, store: Store): ConnectionAdapter {.raises: [].} =
@@ -105,14 +139,19 @@ method start(self: ConnectionAdapter){.raises: [].} =
         self.writeLoopFut = self.writeloop()
         asyncSpawn self.readLoopFut
         asyncSpawn self.writeLoopFut
-            
+
 proc stop*(self: ConnectionAdapter) =
+    proc breakCycle(){.async.} =
+        await sleepAsync(2000)
+        self.signal(both,breakthrough)
+
     if not self.stopped:
         trace "stopping"
         self.stopped = true
         cancelSoon self.readLoopFut
         cancelSoon self.writeLoopFut
         self.socket.close()
+        asyncSpawn breakCycle()
 
 method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
     if sig == close or sig == stop: self.stop()

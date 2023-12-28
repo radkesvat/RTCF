@@ -71,7 +71,7 @@ method read*(self: TcpTunnel, bytes: int, chain: Chains = default): Future[Strin
             trace "discarded received fake packet", bytes = self.readLine.len
             self.store.reuse self.readLine
         else:
-            return self.readLine
+            return  self.readLine
 
 
 

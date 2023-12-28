@@ -14,8 +14,7 @@
 #
 # made for orc gc in mind
 
-import stew/byteutils, math, ptrops, sequtils
-import threading/atomics, std/isolation
+import stew/byteutils, math, ptrops, sequtils ,std/isolation
 export ptrops, isolation
 
 const log_hooks {.booldefine.} = true
@@ -237,6 +236,8 @@ proc cstring*(v: StringView): cstring =
     v.buf[v.len] = 0.byte
     return cast[cstring](v.buf)
 
+template toOpenArrayByte*(v: StringView):openArray[byte]=
+    system.toOpenArray(v.buf,0,v.high)
 
 # when you need more size
 proc expand(v: StringView; increase: int) =
@@ -269,10 +270,10 @@ proc write*(v: StringView; d: openArray[byte|char]) =
     if v.rCap < d.len:
         expand(v, (d.len - v.rCap))
     copyMem(v.buf(), addr d[0], d.len)
-    v[].lenpos = v[].curpos + d.len
+    # v[].lenpos = v[].curpos + d.len
 
 proc write*(v: StringView; d: SomeInteger) =
-    v.write((cast[ptr UncheckedArray[byte]](addr d)).toOpenArray(0, sizeof(typeof d)))
+    v.write((cast[ptr UncheckedArray[byte]](addr d)).toOpenArray(0, sizeof(d)-1))
 
 # bad idea but we try to move your string
 proc write*(v: StringView; d: sink string) =
@@ -280,7 +281,10 @@ proc write*(v: StringView; d: sink string) =
 
 
 template reserve*(v: StringView; bytes: int) =
-    v.setLen(v.len + bytes)
+    if v.len < bytes:
+        v.setLen(bytes)
+
+    # v.setLen(v.len + bytes)
 
 template consume*(v: StringView; bytes: int) =
     v.setLen(v.len - bytes)

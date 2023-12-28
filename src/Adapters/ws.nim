@@ -1,4 +1,4 @@
-import tunnel,store, websock/websock
+import tunnel, store, websock/websock
 
 
 
@@ -19,25 +19,25 @@ type
         socket: WSSession
         store: Store
 
-    
+
 const
     bufferSize = 4096
 
 
-proc stop*(self: WebsocketAdapter)=
-    if not self.stopped :
+proc stop*(self: WebsocketAdapter) =
+    if not self.stopped:
         trace "stopping"
         self.stopped = true
         asyncSpawn self.socket.close()
 
-method init(self: WebsocketAdapter, name: string, socket: WSSession, store: Store) =
+method init(self: WebsocketAdapter, name: string, socket: WSSession, store: Store) {.raises: [].} =
     self.socket = socket
     self.store = store
     procCall init(Adapter(self), name, hsize = 0)
 
 
 
-proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, store: Store): WebsocketAdapter =
+proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, store: Store): WebsocketAdapter {.raises: [].} =
     result = new WebsocketAdapter
     result.init(name, socket, store)
     trace "Initialized", name
@@ -46,8 +46,7 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         rp.bytes(byteseq):
-            await self.socket.send(byteseq,Binary)
-
+            await self.socket.send(byteseq, Binary)
     except CatchableError as e:
         self.stop; raise e
     finally:
@@ -57,13 +56,14 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
 method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     var sv = self.store.pop()
     try:
+        trace "asking for ", bytes = bytes
         sv.reserve bytes
-        var bytesread = await self.socket.recv(cast[ptr byte](sv.buf),bytes)
+        var bytesread = await self.socket.recv(cast[ptr byte](sv.buf), bytes)
+        trace "received", bytes = bytesread
 
         if bytesread == bytes:
             return sv
         else:
-            self.store.reuse sv
             if bytesread == 0:
                 trace "received 0 bytes from ws socket"
                 raise FlowCloseError()
@@ -72,12 +72,13 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                 quit(1)
 
     except CatchableError as e:
+        self.store.reuse move sv
         self.stop; raise e
 
 proc start(self: WebsocketAdapter) =
     {.cast(raises: []).}:
         trace "starting"
-        
+
 
 method signal*(self: WebsocketAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
     if sig == start: self.start()

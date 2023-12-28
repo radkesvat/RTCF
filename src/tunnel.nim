@@ -1,6 +1,7 @@
 import stew/byteutils, stringview, chronos, hashes
+from threading/channels import AsyncChannelError
 
-export byteutils, stringview, chronos, hashes
+export byteutils, stringview, chronos, hashes, AsyncChannelError
 
 logScope:
     topic = "Tunnel"
@@ -43,17 +44,18 @@ type
         stopped*: bool
 
     #raised when a tunnel dose not satisfy to continue the process
-    FlowError* = ref object of CatchableError
+    FlowError* = object of CatchableError
     FlowCloseError* = ref object of FlowError
     FlowReadError* = ref object of FlowError
     InsufficientBytse* = ref object of FlowReadError
     FlowWriteError* = ref object of FlowError
 
-    
-    
-template meansCancel*(e: (CatchableError or ref CatchableError) ) : bool=
-    e.name == "AsyncChannelError" or e.name == "FlowError" or e.name == "CancelledError" or
-    e.name == "TransportUseClosedError"
+
+
+# template meansCancel*(e: (CatchableError or ref CatchableError)): bool =
+#     e.name == "AsyncChannelError" or e.name == "FlowError" or e.name == "CancelledError" or
+#     e.name == "TransportUseClosedError" or e.name == "FlowCloseError" or e.name == "FlowReadError" or
+#     e.name == "InsufficientBytse" or e.name == "FlowWriteError" 
 
 proc `==`*(x, y: InfoTag): bool {.borrow.}
 proc `$`*(x: InfoTag): string {.borrow.}
@@ -248,8 +250,6 @@ method read*(self: Tunnel, bytes: int, chain: Chains = default): Future[StringVi
     return next.read(bytes, chain)
 
 
-
-
 type
     Location* = enum
         BeforeGfw, AfterGfw
@@ -266,7 +266,7 @@ method init*(self: Adapter, name: string, hsize: static[int]){.gcsafe.} =
 
 method start*(self: Adapter){.base, gcsafe.} =
     if self.getNext == nil:
-        doAssert self.getPrev != nil,self.name & " Adapters rule broken, the chain is not finished."
+        doAssert self.getPrev != nil, self.name & " Adapters rule broken, the chain is not finished."
         self.side = Side.Left
     else:
         self.side = Side.Right

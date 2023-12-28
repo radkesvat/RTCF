@@ -15,9 +15,9 @@ export results
 
 {.push raises: [].}
 
-const hasThreadSupport* = compileOption("threads")
-when not(hasThreadSupport):
-  {.fatal: "Compile this program with threads enabled!".}
+# const hasThreadSupport* = compileOption("threads")
+# when not(hasThreadSupport):
+#   {.fatal: "Compile this program with threads enabled!".}
 
 import "."/[osdefs, osutils, oserrno]
 
