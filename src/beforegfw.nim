@@ -156,7 +156,7 @@ proc main() =
     if globals.multi_port and globals.reset_iptable:
         addExitProc do(): resetIptables()
         setControlCHook do(){.noconv.}: quit()
-        c_signal(SIGTERM, proc(a: cint){.noconv.} = quit())
+        c_signal(ansi_c.SIGTERM, proc(a: cint){.noconv.} = quit())
 
     #disable ufw
     when defined(linux) and not defined(android):

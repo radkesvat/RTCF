@@ -1,7 +1,7 @@
 
 import std/[random]
 from globals import nil
-import beforeGFW,afterGFW
+import beforegfw,aftergfw
 
 randomize()
 globals.init()
