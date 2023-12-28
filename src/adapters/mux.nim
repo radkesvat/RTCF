@@ -207,6 +207,13 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                             if globalTableHas cid:
                                 await globalTable[cid].second.send move data
                                 notice "data is written to created channel", cid = cid
+                                
+                                var fut = self.handleCid(cid)
+                                self.handles.add fut
+                                fut.callback = proc(udata: pointer) =
+                                    let index = self.handles.find fut
+                                    if index != -1: self.handles.del index
+                                asyncSpawn fut
 
                                 return
                             await sleepAsync(20)
@@ -298,11 +305,11 @@ method start(self: MuxAdapetr){.raises: [].} =
 
                     of Side.Right:
                         # right side, we create cid signals
-                        self.acceptConnectionFut = acceptcidloop(self)
+                        # self.acceptConnectionFut = acceptcidloop(self)
                         # we also need to read from right adapter
                         # examine and forward data to left channel
                         self.readloopFut = readloop(self, create)
-                        asyncSpawn self.acceptConnectionFut
+                        # asyncSpawn self.acceptConnectionFut
                         asyncSpawn self.readloopFut
 
 

@@ -52,7 +52,7 @@ proc newPortTunnel*(name: string = "PortTunnel", multiport: bool, writeport: Por
 method write*(self: PortTunnel, data: StringView, chain: Chains = default): Future[void] {.raises: [], gcsafe.} =
     setWriteHeader(self, data):
         copyMem(self.getWriteHeader, addr self.writePort, self.hsize)
-        trace "Appended ", header = $self.writePort, to = ($self.writeLine), name = self.name
+        trace "Appended ", header = $self.writePort, name = self.name
 
     procCall write(Tunnel(self), self.writeLine)
 

@@ -47,6 +47,7 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
     try:
         rp.bytes(byteseq):
             await self.socket.send(byteseq, Binary)
+            trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
         self.stop; raise e
     finally:

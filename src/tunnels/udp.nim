@@ -45,7 +45,7 @@ proc newUdpTunnel*(name: string = "UdpTunnel", store: Store, fakeupload_ratio: i
 method write*(self: UdpTunnel, data: StringView, chain: Chains = default): Future[void] {.async.} =
     setWriteHeader(self, data):
         copyMem(self.getWriteHeader, addr self.header, self.hsize)
-        trace "Appended ", header = $self.header, to = ($self.writeLine), name = self.name
+        trace "Appended ", header = $self.header,  name = self.name
 
     await procCall write(Tunnel(self), self.writeLine)
     if 0 < self.fakeupload_ratio:
@@ -65,7 +65,7 @@ method read*(self: UdpTunnel, bytes: int, chain: Chains = default): Future[Strin
         setReadHeader(self, await procCall read(Tunnel(self), bytes+self.hsize))
         # copyMem(addr self.readPort, self.getReadHeader, self.hsize)
         assert (self.getReadHeader[][0] and UdpPacketFlag) == UdpPacketFlag, "received packet protocol mismatch!"
-        trace "extracted ", header = $self.getReadHeader[][0], result = $self.readLine
+        trace "extracted ", header = $self.getReadHeader[][0]
         if (self.getReadHeader[][0] and FakeUploadFlag) == FakeUploadFlag:
             trace "discarded received fake packet", bytes = self.readLine.len
             self.store.reuse self.readLine

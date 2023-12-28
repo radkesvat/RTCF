@@ -26,7 +26,7 @@ proc startCoreConnector(threadID: int) {.async.} =
 
 proc tick(){.async.}=
     while true:
-        await sleepAsync(5000)
+        await sleepAsync(30000)
         echo "tick"
         
 proc run*(thread: int) {.async.} =

@@ -44,7 +44,7 @@ method write*(self: TransportIdentTunnel, data: StringView, chain: Chains = defa
     assert self.header != 0x0, "cannot write before first read af transport header to identify!"
     setWriteHeader(self, data):
         copyMem(self.getWriteHeader, addr self.header, self.hsize)
-        trace "Appended ", header = $self.header, to = ($self.writeLine), name = self.name
+        trace "Appended ", header = $self.header, name = self.name
 
     procCall write(Tunnel(self), self.writeLine)
 
@@ -57,7 +57,7 @@ method read*(self: TransportIdentTunnel, bytes: int, chain: Chains = default): F
             copyMem(addr self.header, self.getReadHeader, self.hsize)
             self.header = self.header and (not FakeUploadFlag)
 
-        trace "extracted ", header = $self.getReadHeader[][0], result = $self.readLine
+        trace "extracted ", header = $self.getReadHeader[][0]
         if (self.getReadHeader[][0] and FakeUploadFlag) == FakeUploadFlag:
             trace "discarded received fake packet", bytes = self.readLine.len
         else:
