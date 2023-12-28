@@ -335,7 +335,8 @@ task build_rtcf_debug, "builds rtcf debug":
 
 #only a shortcut
 task build, "builds only rtcf (debug)":
-    echo staticExec "taskkill /IM rtcf.exe /F"
+    # echo staticExec "taskkill /IM rtcf.exe /F"
+    
     var release = false
     if paramCount() >= 2:
         if paramStr(2).toLower == "release":

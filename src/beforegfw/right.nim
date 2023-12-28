@@ -9,7 +9,7 @@ from globals import nil
 logScope:
     topic = "Iran RightSide"
 
-
+var foundpeer = false
 
 proc handle(request: HttpRequest) {.async.} =
     trace "Handling request:", uri = request.uri.path
@@ -20,6 +20,11 @@ proc handle(request: HttpRequest) {.async.} =
         warn "rejected websocket connection, password mismatch!"
         return
         
+    if not foundpeer:
+        foundpeer = true
+        lock(peerConnectedlock):
+            peerConnected = true
+
     try:
         let deflateFactory = deflateFactory()
         let server = WSServer.new(factories = [deflateFactory])

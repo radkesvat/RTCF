@@ -438,8 +438,8 @@ proc init*() =
                                 break
                             except:
                                 if not already_registered:
-                                    # let suc = waitFor registerNewDomainToCF(cdn_domain, $self_ip)
-                                    let suc = await registerNewDomainToCF(cdn_domain, "1.2.4.5")
+                                    let suc = waitFor registerNewDomainToCF(cdn_domain, $self_ip)
+                                    # let suc = await registerNewDomainToCF(cdn_domain, "1.2.4.5")
                                     # when defined release: macros.error "you forgot to uncomment!"; quit(1)
                                     if not suc:
                                         fatal "Registration to CloudFlare was unsuccessful!"; quit(1)

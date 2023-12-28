@@ -93,7 +93,7 @@ proc isPortFree(port: Port): bool =
                                client: StreamTransport) {.async.} = discard
             , flags = {ServerFlags.ReuseAddr})
 
-        server.stop()
+        waitFor server.closeWait()
         return true
     except:
         print getCurrentException()
