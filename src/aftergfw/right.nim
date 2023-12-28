@@ -17,14 +17,14 @@ proc connect() {.async.} =
             let deflateFactory = deflateFactory()
             let ws = when true:
                 await WebSocket.connect(
-                    initTAddress(globals.listen_addr, globals.cf_listen_port),
+                    initTAddress(globals.cdn_domain, globals.iran_port),
                     path = "/ws" & $globals.sh1,
                     secure = true,
                     factories = @[deflateFactory],
                     flags = {})
                 else:
                     await WebSocket.connect(
-                        initTAddress(globals.listen_addr, globals.cf_listen_port),
+                        initTAddress(globals.cdn_domain, globals.iran_port),
                         path = "/ws" & $globals.sh1,
                         factories = [deflateFactory] )
 

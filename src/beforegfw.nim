@@ -1,6 +1,5 @@
 import std/[cpuinfo, locks, strutils, os, osproc]
 import std/exitprocs
-import system / ansi_c
 import globals, chronos
 import system/ansi_c except SIGTERM
 from globals import nil
@@ -61,21 +60,6 @@ when NimMajor >= 2 and hasThreadSupport:
             discard
 
 
-# proc run(arg: int) {.thread.} =
-#     proc echoundwait(){.async.} =
-#         while true:
-#             echo "Hi form " & $arg & "."
-#             await sleepAsync(1.seconds)
-#     discard echoundwait()
-#     waitFor(sleepAsync(2000))
-
-# var threads = newSeq[Thread[int]](numProcs)
-# for i in 0 ..< numProcs:
-#     createThread(threads[i], run, i+1)
-#     sleep(12)
-
-
-# joinThreads(threads)
 
 proc resetIptables() =
     info "reseting iptable nat"
@@ -156,7 +140,7 @@ proc main() =
     if globals.multi_port and globals.reset_iptable:
         addExitProc do(): resetIptables()
         setControlCHook do(){.noconv.}: quit()
-        c_signal(ansi_c.SIGTERM, proc(a: cint){.noconv.} = quit())
+        c_signal(SIGTERM, proc(a: cint){.noconv.} = quit())
 
     #disable ufw
     when defined(linux) and not defined(android):
@@ -205,8 +189,8 @@ proc main() =
             while threads_left > 0:
                 threads.setLen(threads.len+2)
                 # TODO: Set the scheduling policy to SCHED_FIFO (real-time)
-                createThread(threads[i], leftThread, i+1); pinToCpu[int](threads[i], 4); inc i
-                createThread(threads[i], rightThread, i+1); pinToCpu[int](threads[i], 4); inc i
+                createThread(threads[i], leftThread, i+1);  inc i
+                createThread(threads[i], rightThread, i+1); inc i
                 threads_left -= 2
 
             info "Waiting for spawend threads"

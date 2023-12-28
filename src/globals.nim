@@ -38,7 +38,8 @@ var cf_listen_port*: Port = 0.Port
 var next_route_addr* = ""
 var next_route_port*: Port = 0.Port
 var iran_ip*: IpAddress
-var cdn_port*: Port = 0.Port
+
+var iran_port*: Port = 0.Port
 var cdn_domain*: string
 var cdn_ip*: IpAddress
 var self_ip*: IpAddress
@@ -259,11 +260,11 @@ proc init*() =
                     of "iran-ip":
                         iran_ip = parseIpAddress(p.val)
 
-                    of "cdn-port":
+                    of "iran_port":
                         try:
-                            cdn_port = parseInt(p.val).Port
+                            iran_port = parseInt(p.val).Port
                         except:
-                            fatal "could not parse cdn-port", given = p.val; quit(1)
+                            fatal "could not parse iran_port", given = p.val; quit(1)
 
 
                     of "domain":
@@ -349,9 +350,9 @@ proc init*() =
                 if cdn_domain.isEmptyOrWhitespace():
                     fatal "specify the cdn domain", switch = "--cdn-domain"
                     exit = true
-                if cdn_port == 0.Port and not multi_port:
-                    fatal "specify the cdn port (usually 443)", switch = "--cdn-domain"
-                    exit = true
+            if iran_port == 0.Port and not multi_port:
+                fatal "specify the iran port (usually 443)", switch = "--iran-port"
+                exit = true
 
             if next_route_addr.isEmptyOrWhitespace():
                 fatal "specify the next ip for routing (usually 127.0.0.1)", switch = "--toip"
@@ -452,7 +453,7 @@ proc init*() =
                                 await sleepAsync(100)
                 waitFor sync()
 
-            else:discard
+            else: discard
 
     password_hash = $(secureHash(password))
     sh1 = hash(password_hash).uint32
