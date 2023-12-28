@@ -18,6 +18,7 @@ proc connect() {.async.} =
             let ws = when true:
                 await WebSocket.connect(
                     globals.cdn_domain & ":" & $globals.iran_port,
+                    hostname = globals.cdn_domain ,
                     path = "/ws" & $globals.sh1,
                     secure = true,
                     factories = @[deflateFactory],

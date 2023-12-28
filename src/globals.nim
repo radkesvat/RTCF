@@ -159,23 +159,24 @@ when defined(linux) and not defined(android):
     import std/[posix, os, osproc]
 
 proc increaseSystemMaxFd() =
-    #increase systam maximum fds to be able to handle more than 1024 cons
-    if not globals.keep_system_limit:
-        if not isAdmin():
-            echo "Please run as root. or start with --keep-os-limit "
-            quit(1)
+    when defined(linux) and not defined(android):
+        #increase systam maximum fds to be able to handle more than 1024 cons
+        if not globals.keep_system_limit:
+            if not isAdmin():
+                echo "Please run as root. or start with --keep-os-limit "
+                quit(1)
 
-        try:
-            discard 0 == execShellCmd("sysctl -w fs.file-max=1000000")
-            var limit = RLimit(rlim_cur: 650000, rlim_max: 660000)
-            assert 0 == setrlimit(RLIMIT_NOFILE, limit)
-        except: # try may not be able to catch above exception, anyways
-            echo getCurrentExceptionMsg()
-            echo "Could not increase system max connection (file descriptors) limit."
-            echo "Please run as root. or start with --keep-os-limit "
-            quit(1)
+            try:
+                discard 0 == execShellCmd("sysctl -w fs.file-max=1000000")
+                var limit = RLimit(rlim_cur: 650000, rlim_max: 660000)
+                assert 0 == setrlimit(RLIMIT_NOFILE, limit)
+            except: # try may not be able to catch above exception, anyways
+                echo getCurrentExceptionMsg()
+                echo "Could not increase system max connection (file descriptors) limit."
+                echo "Please run as root. or start with --keep-os-limit "
+                quit(1)
 
-
+    else:discard
 
 proc init*() =
     info "Application Version", version
