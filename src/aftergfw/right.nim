@@ -41,9 +41,8 @@ proc connect() {.async.} =
 
 
 proc startWebsocketConnector(threadID: int) {.async.} =
-    for i in 0..<8:
-        trace "Initiating connection"
-        await connect()
+    trace "Initiating connection"
+    await connect()
 
 
 proc run*(thread: int) {.async.} =
@@ -52,4 +51,4 @@ proc run*(thread: int) {.async.} =
     dynamicLogScope(thread):
         await startWebsocketConnector(thread)
 
-
+    

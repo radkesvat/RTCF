@@ -318,8 +318,9 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
             of BeforeGfw:
                 case self.side:
                     of Side.Left:
+                        var total_len = rp.len.uint16
                         rp.shiftl SizeHeaderLen
-                        rp.write(rp.len.uint16)
+                        rp.write(total_len)
 
                         rp.shiftl CidHeaderLen
                         rp.write(self.selectedCon.cid)
