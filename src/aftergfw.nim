@@ -3,7 +3,7 @@ import std/exitprocs
 import globals, chronos
 import system/ansi_c except SIGTERM
 from globals import nil
-import beforeGFW/[left, right]
+import afterGFW/[left, right]
 
 logScope:
     topic = "Kharej"
