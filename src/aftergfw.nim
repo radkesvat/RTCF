@@ -62,8 +62,8 @@ proc main() =
 
     
     proc singlethread() =
-        asyncSpawn left.run(1)
-        asyncSpawn right.run(1)
+        asyncSpawn left.run(0)
+        asyncSpawn right.run(0)
         runForever()
 
     when hasThreadSupport:

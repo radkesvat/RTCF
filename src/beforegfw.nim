@@ -80,7 +80,6 @@ proc isPortFree(port: Port): bool =
         waitFor server.closeWait()
         return true
     except:
-        print getCurrentException()
         return false
 
 

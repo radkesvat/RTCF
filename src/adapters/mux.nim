@@ -41,7 +41,7 @@ const
     CidHeaderLen = 2
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
-    ConnectionChanFixedSize = 16
+    ConnectionChanFixedSize = 3
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -113,9 +113,9 @@ proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
             if sv.isNil: raise newException(AsyncChannelError, "")
 
         except AsyncChannelError as e:
-            warn "HandleCid closed, [Read]", msg = e.name, cid = cid
+            warn "HandleCid closed [Read]", msg = e.name, cid = cid
             {.cast(raises: []), gcsafe.}:
-                var copy:Chan
+                var copy: Chan
                 safeAccess:
                     globalTable[cid].first.close()
                     globalTable[cid].first.close()
@@ -202,7 +202,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 else:
                     sv.shiftl MuxHeaderLen; sv
 
-            
+
             if globalTableHas(cid):
                 try:
                     await globalTable[cid].second.send data
@@ -217,7 +217,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             else:
                 case whenNotFound:
                     of create:
-                        if size == 0: continue # dont create a chan for a close sig!!!
+                        if size == 0: self.store.reuse move data; continue # dont create a chan for a close sig!!!
 
                         notice "sending create!", cid = cid
                         self.masterChannel.sendSync cid
@@ -243,14 +243,15 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                                     fatal "The other thread did not handle a connection after 2 seconds of waiting !"
                                     quit(1)
 
-                            await sleepAsync(20)
+                            await sleepAsync(20) # !
 
                     of sendclose:
                         if size > 0:
                             self.store.reuse move data
                             trace "sending close for", cid = cid
                             await procCall write(Tunnel(self), closePacket(self, cid))
-
+                        else:
+                            self.store.reuse move data
                     of nothing:
                         self.store.reuse move data
 
@@ -445,7 +446,7 @@ method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains 
 
     procCall signal(Tunnel(self), dir, sig, chain)
 
-    if sig == close or sig == stop:self.stop()
+    if sig == close or sig == stop: self.stop()
 
     if sig == start: self.start()
 

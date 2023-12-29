@@ -81,20 +81,24 @@ proc writeloop(self: ConnectorAdapter){.async.} =
         except [CancelledError, TransportError]:
             var e = getCurrentException()
             trace "Writeloop Cancel, [Read]", msg = e.name
+            self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
             error "Writeloop Unexpected Error, [Read]", name = e.name, msg = e.msg
             quit(1)
 
-        if self.stopped: self.store.reuse sv; return
+       
         try:
             trace "Writeloop write", bytes = sv.len
+            if self.stopped: return
+
             await procCall write(Tunnel(self), move sv)
 
         except [CancelledError, FlowError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Write]", msg = e.name
+            if sv != nil:self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
@@ -128,11 +132,9 @@ proc readloop(self: ConnectorAdapter){.async.} =
                 if not self.stopped: signal(self, both, close)
                 return
 
-        if self.stopped: self.store.reuse sv; return
-
         try:
             trace "Readloop write to socket", count = sv.len
-
+            if self.stopped: return
 
             if sv.len != await self.socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()

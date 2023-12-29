@@ -23,6 +23,10 @@ proc startCoreConnector(threadID: int) {.async.} =
                 con_adapter.chain(port_tunnel).chain(tident_tunnel).chain(mux_adapter)
                 con_adapter.signal(both, start)
 
+proc logs(){.async.}=
+    while true:
+        echo publicStore.available.len()
+        await sleepAsync(500)
 
         
 proc run*(thread: int) {.async.} =
@@ -31,6 +35,7 @@ proc run*(thread: int) {.async.} =
     #     info "Mode Iran (Tcp + Udp)"
     # else:
     #     info "Mode Iran"
+    asyncCheck logs()
     dynamicLogScope(thread):
         await startCoreConnector(thread)
 

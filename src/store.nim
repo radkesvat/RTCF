@@ -5,12 +5,12 @@ logScope:
     topic = "Store"
 
 
-const DefaultStoreCap = 160
+const DefaultStoreCap = 300
 const DefaultStrvCap = 4096
 
 
 type StoreIML = object
-    available: seq[Stringview]
+    available*: seq[Stringview]
     maxCap: int
     randomBuf: string
     lock: Lock
@@ -50,7 +50,7 @@ proc newStore*(cap = DefaultStoreCap): Store =
 template requires(self: Store, count: int) =
     if self.available.len < count:
         warn "Allocating again", wasleft = self.available.len, requested = count, increase_to = self.maxCap*2
-        quit(0)
+        # doAssert false
 
         self.available.setLen(self.maxCap*2)
 
