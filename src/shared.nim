@@ -13,13 +13,17 @@ when helpers.hasThreadSupport:
 else:
     var peerConnected*: bool = false
 
-template lock*(a: Lock; body: untyped) =
-    a.acquire()
-    {.locks: [peerConnectedlock].}:
-        try:
-            body
-        finally:
-            a.release()
+template lockpeerConnected*(body: untyped) =
+    when helpers.hasThreadSupport:
+        peerConnectedlock.acquire()
+        {.locks: [peerConnectedlock].}:
+            try:
+                body
+            finally:
+                peerConnectedlock.release()
+    else:
+        body
+
 
             
 var publicStore* = newStore()

@@ -22,7 +22,7 @@ proc handle(request: HttpRequest) {.async.} =
         
     if not foundpeer:
         foundpeer = true
-        lock(peerConnectedlock):
+        lockpeerConnected:
             peerConnected = true
 
     try:

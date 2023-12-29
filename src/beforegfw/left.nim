@@ -15,10 +15,7 @@ proc startTcpListener(threadID: int) {.async.} =
                         transp: StreamTransport) {.async.} =
             try:
                 if not foundpeer:
-                    when helpers.hasThreadSupport:
-                        lock(peerConnectedlock):
-                            foundpeer = peerConnected
-                    else:
+                    lockpeerConnected:
                         foundpeer = peerConnected
                 if not foundpeer:
                     error "user connection but no foreign server connected yet!, closing..."
