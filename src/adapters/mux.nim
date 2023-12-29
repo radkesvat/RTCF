@@ -50,6 +50,7 @@ when hasThreadSupport:
     import threading/atomics
     var globalCounter: Atomic[Cid]
     var globalLock: Lock
+    initLock globalLock
 else:
     var globalCounter: Cid
 
@@ -114,12 +115,13 @@ proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
         except AsyncChannelError as e:
             warn "HandleCid closed, [Read]", msg = e.name, cid = cid
             {.cast(raises: []), gcsafe.}:
+                var copy:Chan
                 safeAccess:
                     globalTable[cid].first.close()
                     globalTable[cid].first.close()
-                    var copy = globalTable[cid].second
+                    copy = globalTable[cid].second
                     system.reset(globalTable[cid])
-                    await copy.send nil
+                await copy.send nil
 
         except CancelledError as e:
             warn "HandleCid Canceled [Read]", msg = e.name, cid = cid
@@ -156,7 +158,7 @@ proc acceptcidloop(self: MuxAdapetr){.async.} =
         try:
             let new_cid = await self.masterChannel.recv()
             trace "acceptcidloop got a channel!", cid = new_cid
-            safeAccess: assert(globalTableHas new_cid)
+            assert(globalTableHas new_cid)
             var fut = self.handleCid(new_cid)
             self.handles.add fut
             fut.callback = proc(udata: pointer) =
@@ -199,54 +201,55 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 else:
                     sv.shiftl MuxHeaderLen; sv
 
-            safeAccess:
-                if globalTableHas(cid):
-                    try:
-                        await globalTable[cid].second.send data
-                        data = nil
-                    except AsyncChannelError:
-                        # channel is half closed ...
-                        self.store.reuse move data
-                        warn "read loop was about to write data to a half closed chanenl!", cid = cid
-                        await sleepAsync(5)
-                        continue
-
-            case whenNotFound:
-                of create:
-                    notice "sending create!", cid = cid
-                    self.masterChannel.sendSync cid
-                    # 1 or 2 time moving to event loop must be much faster than waiting and also enough
-                    await sleepAsync(1)
-                    # await sleepAsync(1)
-                    for i in 0 .. 100:
-                        safeAccess:
-                            if globalTableHas cid:
-                                await globalTable[cid].second.send move data
-                                notice "data is written to created channel", cid = cid
-                                await sleepAsync(1)
-
-                                var fut = self.handleCid(cid)
-                                self.handles.add fut
-                                fut.callback = proc(udata: pointer) =
-                                    let index = self.handles.find fut
-                                    if index != -1: self.handles.del index
-                                asyncSpawn fut
-                                break
-                            if i == 100:
-                                # This  never happen, so quit if that actually happend to catch bug
-                                fatal "The other thread did not handle a connection after 2 seconds of waiting !"
-                                quit(1)
-
-                        await sleepAsync(20)
-
-                of sendclose:
-                    if size > 0:
-                        self.store.reuse move data
-                        trace "sending close for", cid = cid
-                        await procCall write(Tunnel(self), closePacket(self, cid))
-
-                of nothing:
+            
+            if globalTableHas(cid):
+                try:
+                    await globalTable[cid].second.send data
+                    data = nil
+                except AsyncChannelError:
+                    # channel is half closed ...
                     self.store.reuse move data
+                    warn "read loop was about to write data to a half closed chanenl!", cid = cid
+                    await sleepAsync(5)
+                    continue
+
+            else:
+                case whenNotFound:
+                    of create:
+                        notice "sending create!", cid = cid
+                        self.masterChannel.sendSync cid
+                        # 1 or 2 time moving to event loop must be much faster than waiting and also enough
+                        await sleepAsync(1)
+                        # await sleepAsync(1)
+                        for i in 0 .. 100:
+                            safeAccess:
+                                if globalTableHas cid:
+                                    await globalTable[cid].second.send move data
+                                    notice "data is written to created channel", cid = cid
+                                    await sleepAsync(1)
+
+                                    var fut = self.handleCid(cid)
+                                    self.handles.add fut
+                                    fut.callback = proc(udata: pointer) =
+                                        let index = self.handles.find fut
+                                        if index != -1: self.handles.del index
+                                    asyncSpawn fut
+                                    break
+                                if i == 100:
+                                    # This  never happen, so quit if that actually happend to catch bug
+                                    fatal "The other thread did not handle a connection after 2 seconds of waiting !"
+                                    quit(1)
+
+                            await sleepAsync(20)
+
+                    of sendclose:
+                        if size > 0:
+                            self.store.reuse move data
+                            trace "sending close for", cid = cid
+                            await procCall write(Tunnel(self), closePacket(self, cid))
+
+                    of nothing:
+                        self.store.reuse move data
 
 
     except [CancelledError, AsyncChannelError, FlowError, TransportError]:
