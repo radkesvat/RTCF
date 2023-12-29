@@ -1,7 +1,7 @@
 import tunnel, strutils, store
 import sequtils, chronos/transports/stream
-import tunnels/transportident 
-import tunnels/port 
+import tunnels/transportident
+import tunnels/port
 # This module unfortunately has global shared memory as part of its state
 
 logScope:
@@ -18,16 +18,16 @@ logScope:
 
 type
     Protocol = enum
-        Tcp,Udp
+        Tcp, Udp
     ConnectorAdapter* = ref object of Adapter
         socket: StreamTransport
         readLoopFut: Future[void]
         writeLoopFut: Future[void]
         store: Store
-        protocol:Protocol
-        isMultiPort:bool
-        targetIp:IpAddress
-        targetPort:Port
+        protocol: Protocol
+        isMultiPort: bool
+        targetIp: IpAddress
+        targetPort: Port
 
 
 const
@@ -36,14 +36,14 @@ const
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
 
-proc connect(self: ConnectorAdapter):Future[bool] {.async.}=
+proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
     assert self.socket == nil
-    var (tident,_) = self.findByType(TransportIdentTunnel,right)
+    var (tident, _) = self.findByType(TransportIdentTunnel, right)
     doAssert tident != nil, "connector adapter could not locate TransportIdentTunnel! it is required"
-    self.protocol =  if tident.isTcp : Tcp else: Udp
+    self.protocol = if tident.isTcp: Tcp else: Udp
 
     if self.isMultiPort:
-        var (port_tunnel,_) = self.findByType(PortTunnel,right)
+        var (port_tunnel, _) = self.findByType(PortTunnel, right)
         doAssert port_tunnel != nil, "connector adapter could not locate PortTunnel! it is required"
         self.targetPort = port_tunnel.getReadPort()
     if self.protocol == Tcp:
@@ -57,9 +57,9 @@ proc connect(self: ConnectorAdapter):Future[bool] {.async.}=
             except CatchableError as e:
                 error "could not connect TCP to the core! ", name = e.name, msg = e.msg
                 if i != 4: notice "retrying ...", tries = i
-                else: error "gauve up connecting to core", tries = i;return false
+                else: error "gauve up connecting to core", tries = i; return false
     else:
-        quit(1)            
+        quit(1)
 
 proc writeloop(self: ConnectorAdapter){.async.} =
     #read data from socket, write to chain
@@ -87,10 +87,9 @@ proc writeloop(self: ConnectorAdapter){.async.} =
             error "Writeloop Unexpected Error, [Read]", name = e.name, msg = e.msg
             quit(1)
 
-
+        if self.stopped: self.store.reuse sv; return
         try:
             trace "Writeloop write", bytes = sv.len
-            assert not self.stopped
             await procCall write(Tunnel(self), move sv)
 
         except [CancelledError, FlowError]:
@@ -129,8 +128,12 @@ proc readloop(self: ConnectorAdapter){.async.} =
                 if not self.stopped: signal(self, both, close)
                 return
 
+        if self.stopped: self.store.reuse sv; return
+
         try:
             trace "Readloop write to socket", count = sv.len
+
+
             if sv.len != await self.socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
 
@@ -148,7 +151,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
 
 
-method init(self: ConnectorAdapter, name: string, isMultiPort:bool,targetIp:IpAddress,targetPort:Port, store: Store){.raises: [].} =
+method init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpAddress, targetPort: Port, store: Store){.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
     self.store = store
     self.isMultiPort = isMultiPort
@@ -157,9 +160,10 @@ method init(self: ConnectorAdapter, name: string, isMultiPort:bool,targetIp:IpAd
 
 
 
-proc newConnectorAdapter*(name: string = "ConnectorAdapter",isMultiPort:bool,targetIp:IpAddress,targetPort:Port, store: Store): ConnectorAdapter {.raises: [].} =
+proc newConnectorAdapter*(name: string = "ConnectorAdapter", isMultiPort: bool, targetIp: IpAddress, targetPort: Port,
+        store: Store): ConnectorAdapter {.raises: [].} =
     result = new ConnectorAdapter
-    result.init(name, isMultiPort,targetIp,targetPort, store)
+    result.init(name, isMultiPort, targetIp, targetPort, store)
     trace "Initialized", name
 
 
@@ -177,27 +181,27 @@ method start(self: ConnectorAdapter){.raises: [].} =
 
         self.readLoopFut = self.readloop()
         asyncSpawn self.readLoopFut
-            
+
 proc stop*(self: ConnectorAdapter) =
     proc breakCycle(){.async.} =
         await sleepAsync(2000)
-        self.signal(both,breakthrough)
+        self.signal(both, breakthrough)
 
     if not self.stopped:
         trace "stopping"
         self.stopped = true
-        if not isNil(self.readLoopFut):cancelSoon self.readLoopFut
-        if not isNil(self.writeLoopFut): cancelSoon self.writeLoopFut
         if not isNil(self.socket): self.socket.close()
+        if not isNil(self.readLoopFut): cancelSoon self.readLoopFut
+        if not isNil(self.writeLoopFut): cancelSoon self.writeLoopFut
         asyncSpawn breakCycle()
 
 method signal*(self: ConnectorAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
-    if sig == close or sig == stop: self.stop()
 
     if sig == breakthrough: doAssert self.stopped, "break through signal while still running?"
 
     procCall signal(Tunnel(self), dir, sig, chain)
 
     if sig == start: self.start()
+    if sig == close or sig == stop: self.stop()
 
 

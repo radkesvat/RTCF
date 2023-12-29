@@ -125,6 +125,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
 
         except CancelledError as e:
             warn "HandleCid Canceled [Read]", msg = e.name, cid = cid
+            quit(1)
             self.masterChannel.sendSync cid; return
 
         except CatchableError as e:
@@ -216,6 +217,8 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             else:
                 case whenNotFound:
                     of create:
+                        if size == 0: continue # dont create a chan for a close sig!!!
+
                         notice "sending create!", cid = cid
                         self.masterChannel.sendSync cid
                         # 1 or 2 time moving to event loop must be much faster than waiting and also enough
@@ -344,7 +347,8 @@ proc newMuxAdapetr*(name: string = "MuxAdapetr", master: AsyncChannel[Cid], stor
 
 method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     debug "Write", size = rp.len
-    assert not self.stopped
+    if self.stopped: self.store.reuse rp; return
+
     try:
         case self.location:
             of BeforeGfw:
@@ -436,14 +440,12 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
 
 method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains = default) {.raises: [].} =
-
-    if sig == close or sig == stop:
-        self.stop()
-
     if sig == breakthrough:
         if not self.stopped: fatal "break through signal while still running?"; quit(1)
 
     procCall signal(Tunnel(self), dir, sig, chain)
+
+    if sig == close or sig == stop:self.stop()
 
     if sig == start: self.start()
 
