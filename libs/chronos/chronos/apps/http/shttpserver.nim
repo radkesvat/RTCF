@@ -82,7 +82,7 @@ proc createSecConnection(server: HttpServerRef,
 
 proc new*(htype: typedesc[SecureHttpServerRef],
           address: TransportAddress,
-          processCallback: HttpProcessCallback,
+          processCallback: HttpProcessCallback2,
           tlsPrivateKey: TLSPrivateKey,
           tlsCertificate: TLSCertificate,
           serverFlags: set[HttpServerFlags] = {},
@@ -145,3 +145,52 @@ proc new*(htype: typedesc[SecureHttpServerRef],
     secureFlags: secureFlags
   )
   ok(res)
+
+proc new*(htype: typedesc[SecureHttpServerRef],
+          address: TransportAddress,
+          processCallback: HttpProcessCallback,
+          tlsPrivateKey: TLSPrivateKey,
+          tlsCertificate: TLSCertificate,
+          serverFlags: set[HttpServerFlags] = {},
+          socketFlags: set[ServerFlags] = {ReuseAddr},
+          serverUri = Uri(),
+          serverIdent = "",
+          secureFlags: set[TLSFlags] = {},
+          maxConnections: int = -1,
+          bufferSize: int = 4096,
+          backlogSize: int = DefaultBacklogSize,
+          httpHeadersTimeout = 10.seconds,
+          maxHeadersSize: int = 8192,
+          maxRequestBodySize: int = 1_048_576,
+          dualstack = DualStackType.Auto
+         ): HttpResult[SecureHttpServerRef] {.
+     deprecated: "Callback could raise only CancelledError, annotate with " &
+                 "{.async: (raises: [CancelledError]).}".} =
+
+  proc wrap(req: RequestFence): Future[HttpResponseRef] {.
+       async: (raises: [CancelledError]).} =
+    try:
+      await processCallback(req)
+    except CancelledError as exc:
+      raise exc
+    except CatchableError as exc:
+      defaultResponse(exc)
+
+  SecureHttpServerRef.new(
+    address = address,
+    processCallback = wrap,
+    tlsPrivateKey = tlsPrivateKey,
+    tlsCertificate = tlsCertificate,
+    serverFlags = serverFlags,
+    socketFlags = socketFlags,
+    serverUri = serverUri,
+    serverIdent = serverIdent,
+    secureFlags = secureFlags,
+    maxConnections = maxConnections,
+    bufferSize = bufferSize,
+    backlogSize = backlogSize,
+    httpHeadersTimeout =  httpHeadersTimeout,
+    maxHeadersSize = maxHeadersSize,
+    maxRequestBodySize = maxRequestBodySize,
+    dualstack = dualstack
+  )
