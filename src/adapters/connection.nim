@@ -39,7 +39,7 @@ proc readloop(self: ConnectionAdapter){.async.} =
             trace "Readloop Read", bytes = sv.len
         except [CancelledError, FlowError]:
             var e = getCurrentException()
-            warn "Readloop Cancel, [Read]", msg = e.name
+            warn "Readloop Cancel [Read]", msg = e.name
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
@@ -54,7 +54,7 @@ proc readloop(self: ConnectionAdapter){.async.} =
 
         except [CancelledError, FlowError, TransportError, AsyncStreamError]:
             var e = getCurrentException()
-            warn "Readloop Cancel, [Write]", msg = e.name
+            warn "Readloop Cancel [Write]", msg = e.name
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
@@ -85,7 +85,8 @@ proc writeloop(self: ConnectionAdapter){.async.} =
 
         except [CancelledError, TransportError]:
             var e = getCurrentException()
-            trace "Writeloop Cancel, [Read]", msg = e.name
+            trace "Writeloop Cancel [Read]", msg = e.name
+            self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
@@ -100,7 +101,8 @@ proc writeloop(self: ConnectionAdapter){.async.} =
 
         except [CancelledError, FlowError]:
             var e = getCurrentException()
-            trace "Writeloop Cancel, [Write]", msg = e.name
+            trace "Writeloop Cancel [Write]", msg = e.name
+            if sv != nil:self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
@@ -148,9 +150,9 @@ proc stop*(self: ConnectionAdapter) =
     if not self.stopped:
         trace "stopping"
         self.stopped = true
-        cancelSoon self.readLoopFut
-        cancelSoon self.writeLoopFut
-        self.socket.close()
+        if not isNil(self.socket): self.socket.close()
+        if not isNil(self.readLoopFut): cancelSoon self.readLoopFut
+        if not isNil(self.writeLoopFut): cancelSoon self.writeLoopFut
         asyncSpawn breakCycle()
 
 method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
