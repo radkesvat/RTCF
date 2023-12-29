@@ -204,6 +204,7 @@ template sharedBuildSwitches(){.dirty.} =
 
     
     switch("d", "chronicles_disabled_topics=websock")
+
  
     when Release:
         
@@ -217,8 +218,8 @@ template sharedBuildSwitches(){.dirty.} =
         switch("passL", " -s")
         switch("debuginfo", "off")
         switch("passC", "-DNDEBUG")
-        switch("passC", "-flto")
-        switch("passL", "-flto")
+        # switch("passC", "-flto")
+        # switch("passL", "-flto")
 
         switch("obj_checks", "off")
         switch("field_checks", "off")
@@ -242,6 +243,11 @@ template sharedBuildSwitches(){.dirty.} =
         switch("g")
         switch("d","debuginfo")
         switch("debugger", "native")
+        switch("lineDir", "on")
+        switch("lineTrace", "on")
+        switch("opt", "none")
+        # if threads:switch("passC", "-fsanitize=thread")
+        # if threads:switch("passL", "-fsanitize=thread")
 
     switch("outdir", output_dir)
     switch("out", output_file)

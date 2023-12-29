@@ -86,10 +86,11 @@ proc stop*(self: MuxAdapetr) =
 
         if not self.selectedCon.dcp.isNil:
             {.cast(raises: []).}:
-                notice "sent close channel signal ", cid = self.selectedCon.cid
-                asyncSpawn self.selectedCon.dcp.first.send nil
-                asyncSpawn flush(self.selectedCon.dcp.second, self.store)
-                system.reset(self.selectedCon)
+                safeAccess:
+                    notice "sent close channel signal ", cid = self.selectedCon.cid
+                    asyncSpawn self.selectedCon.dcp.first.send nil
+                    asyncSpawn flush(self.selectedCon.dcp.second, self.store)
+                    system.reset(self.selectedCon)
 
 
 

@@ -175,11 +175,9 @@ proc send*[Msg](chan: AsyncChannel[Msg], msg: Msg) {.async.} =
       # if failed:
       #   raiseChannelFailed()
          
-
   rawSend(chan, unsafeAddr msg, sizeof(Msg))
   discard chan.eventNotEmpty.fireSync()
 
-  
   chan.releaseLock()
 
 proc sendSync*[Msg](chan: AsyncChannel[Msg], msg: Msg) =
