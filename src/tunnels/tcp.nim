@@ -64,9 +64,10 @@ method write*(self: TcpTunnel, data: StringView, chain: Chains = default): Futur
 method read*(self: TcpTunnel, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     while true:
         setReadHeader(self, await procCall read(Tunnel(self), bytes+self.hsize))
-        # copyMem(addr self.readPort, self.getReadHeader, self.hsize)
         assert (self.getReadHeader[][0] and TcpPacketFlag) == TcpPacketFlag, "received packet protocol mismatch!"
         trace "extracted ", header = $self.getReadHeader[][0]
+        
+
         if (self.getReadHeader[][0] and FakeUploadFlag) == FakeUploadFlag:
             trace "discarded received fake packet", bytes = self.readLine.len
             self.store.reuse self.readLine

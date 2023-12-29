@@ -5,14 +5,14 @@ import tunnels/port
 # This module unfortunately has global shared memory as part of its state
 
 logScope:
-    topic = "Connectior Adapter"
+    topic = "Connector Adapter"
 
 
 #     1    2    3    4    5    6    7 ...
 # ---------------------------------------------------
 #                 User Requets
 # ---------------------------------------------------
-#     Connectior contains variable lenght data      |
+#     Connector contains variable lenght data      |
 # ---------------------------------------------------
 
 
@@ -94,7 +94,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
 
         except [CancelledError, FlowError]:
             var e = getCurrentException()
-            trace "Writeloop Cancel, [Write]", msg = e.name
+            trace "Writeloop Cancel [Write]", msg = e.name
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
@@ -130,6 +130,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
+            assert not self.stopped
             if sv.len != await self.socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
 
@@ -185,7 +186,7 @@ proc stop*(self: ConnectorAdapter) =
     if not self.stopped:
         trace "stopping"
         self.stopped = true
-        cancelSoon self.readLoopFut
+        if not isNil(self.readLoopFut):cancelSoon self.readLoopFut
         if not isNil(self.writeLoopFut): cancelSoon self.writeLoopFut
         if not isNil(self.socket): self.socket.close()
         asyncSpawn breakCycle()

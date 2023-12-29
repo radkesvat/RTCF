@@ -61,7 +61,11 @@ method read*(self: PortTunnel, bytes: int, chain: Chains = default): Future[Stri
     copyMem(addr self.readPort, self.getReadHeader, self.hsize)
     trace "extracted ", header = $self.readPort
 
+    if  self.writeport != 0.Port :
+        assert self.readPort == self.writePort
+
     if self.flag_readmode and self.writeport == 0.Port: self.writeport = self.readPort
+
     return self.readLine
 
 

@@ -24,10 +24,6 @@ proc startCoreConnector(threadID: int) {.async.} =
                 con_adapter.signal(both, start)
 
 
-proc tick(){.async.}=
-    while true:
-        await sleepAsync(30000)
-        echo "tick"
         
 proc run*(thread: int) {.async.} =
     await sleepAsync(200)
@@ -35,7 +31,6 @@ proc run*(thread: int) {.async.} =
     #     info "Mode Iran (Tcp + Udp)"
     # else:
     #     info "Mode Iran"
-    asyncCheck tick()
     dynamicLogScope(thread):
         await startCoreConnector(thread)
 

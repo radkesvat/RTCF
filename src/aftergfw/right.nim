@@ -33,7 +33,8 @@ proc connect() {.async.} =
             var ws_adapter = newWebsocketAdapter(socket = ws, store = publicStore)
             mux_adapter.chain(ws_adapter)
             mux_adapter.signal(both, start)
-            
+            await ws.stream.reader.join()
+
         except WebSocketError as e:
             error "Websocket error", name = e.name, msg = e.msg
 

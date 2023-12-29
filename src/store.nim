@@ -5,7 +5,7 @@ logScope:
     topic = "Store"
 
 
-const DefaultStoreCap = 80
+const DefaultStoreCap = 160
 const DefaultStrvCap = 4096
 
 
