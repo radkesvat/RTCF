@@ -150,20 +150,20 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata: StringView = nil) {.async.
 
         except [CancelledError, AsyncStreamError, TransportError, FlowError, WebSocketError]:
             var e = getCurrentException()
-            error "HandleCid Canceled, [Write] ", msg = e.name, cid = cid
+            error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
             # no need to reuse non-nil sv because write have to
             if not self.stopped: signal(self, both, close)
             if not sv.isNil: asyncCheck muxSaveQueue.send (cid, sv)
 
             return
         except CatchableError as e:
-            error "HandleCid error, [Write]", name = e.name, msg = e.msg
+            error "HandleCid error [Write]", name = e.name, msg = e.msg
             quit(1)
 
 
 
 proc acceptcidloop(self: MuxAdapetr) {.async: (raw: true, raises: [CancelledError]).} =
-    var retFut = newFuture[void]()
+    var retFut = newFuture[void](flags = {OwnCancelSchedule})
 
     proc register(cid: Cid, firstdata: StringView = nil) =
         assert(globalTableHas cid)
@@ -251,19 +251,19 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         await sleepAsync(1)
                         # await sleepAsync(1)
                         for i in 0 .. 100:
-                            safeAccess:
-                                if globalTableHas cid:
+                            if globalTableHas cid:
+                                safeAccess:
                                     await globalTable[cid].second.send move data
-                                    notice "data is written to created channel", cid = cid
-                                    await sleepAsync(1)
+                                notice "data is written to created channel", cid = cid
+                                await sleepAsync(1)
+                                var fut = self.handleCid(cid)
+                                self.handles.add fut
+                                fut.callback = proc(udata: pointer) =
+                                    let index = self.handles.find fut
+                                    if index != -1: self.handles.del index
+                                asyncSpawn fut
+                                break
 
-                                    var fut = self.handleCid(cid)
-                                    self.handles.add fut
-                                    fut.callback = proc(udata: pointer) =
-                                        let index = self.handles.find fut
-                                        if index != -1: self.handles.del index
-                                    asyncSpawn fut
-                                    break
                                 if i == 100:
                                     # This  never happen, so quit if that actually happend to catch bug
                                     fatal "The other thread did not handle a connection after 2 seconds of waiting !"
@@ -346,15 +346,15 @@ method start(self: MuxAdapetr){.raises: [].} =
                     of Side.Left:
                         # left mode, we have been created by right Mux
                         # we find our channels,write and read to it
+                        doAssert(not globalTableHas self.selectedCon.cid)
+
                         safeAccess:
-                            doAssert(not globalTableHas self.selectedCon.cid)
                             globalTable[self.selectedCon.cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
                             globalTable[self.selectedCon.cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
                             globalTable[self.selectedCon.cid].first.open()
                             globalTable[self.selectedCon.cid].second.open()
 
                             self.selectedCon.dcp = addr globalTable[self.selectedCon.cid]
-
 
                     of Side.Right:
                         # right side, we create cid signals

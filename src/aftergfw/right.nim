@@ -18,7 +18,7 @@ proc connect() {.async.} =
             let ws = when true:
                 await WebSocket.connect(
                     globals.cdn_domain & ":" & $globals.iran_port,
-                    hostname = globals.cdn_domain ,
+                    hostname = globals.cdn_domain,
                     path = "/ws" & $globals.sh1,
                     secure = true,
                     factories = @[deflateFactory],
@@ -27,7 +27,7 @@ proc connect() {.async.} =
                     await WebSocket.connect(
                         initTAddress(globals.cdn_domain, globals.iran_port),
                         path = "/ws" & $globals.sh1,
-                        factories = [deflateFactory] )
+                        factories = [deflateFactory])
 
             var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
             var ws_adapter = newWebsocketAdapter(socket = ws, store = publicStore)
@@ -35,9 +35,10 @@ proc connect() {.async.} =
             mux_adapter.signal(both, start)
             await ws.stream.reader.join()
 
-        except WebSocketError as e:
+        except [WebSocketError, HttpError]:
+            var e = getCurrentException()
             error "Websocket error", name = e.name, msg = e.msg
-
+            quit(1)
 
 
 
@@ -52,4 +53,4 @@ proc run*(thread: int) {.async.} =
     dynamicLogScope(thread):
         await startWebsocketConnector(thread)
 
-    
+
