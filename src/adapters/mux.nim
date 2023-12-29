@@ -201,7 +201,7 @@ proc acceptcidloop(self: MuxAdapetr) {.async: (raw: true, raises: [CancelledErro
         trace "acceptcidloop canceled"
         restore_fut.cancelSoon()
         newregs_fut.cancelSoon()
-
+    return retFut
 
 proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
     #read data from right adapetr, send it to the right chan
