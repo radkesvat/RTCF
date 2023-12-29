@@ -303,8 +303,7 @@ method init(self: MuxAdapetr, name: string, master: AsyncChannel[Cid], store: St
     self.masterChannel = master
     self.selectedCon.cid = cid
     procCall init(Adapter(self), name, hsize = 0)
-    if muxSaveQueue.isNil:
-        muxSaveQueue = newAsyncChannel[tuple[c: Cid, d: StringView]]()
+
 
 
 method start(self: MuxAdapetr){.raises: [].} =
@@ -488,6 +487,10 @@ proc staticInit() =
     globalTable = cast[typeof globalTable](allocShared0(total_size))
     trace "Allocate globalTable", size = total_size
     static: doAssert sizeof(typeof(globalTable[][0])) <= 16, "roye google chromo sefid nakon plz !"
+
+    if muxSaveQueue.isNil:
+        muxSaveQueue = newAsyncChannel[tuple[c: Cid, d: StringView]]()
+
     trace "Initialized"
 
 staticInit()
