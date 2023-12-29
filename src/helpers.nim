@@ -6,7 +6,7 @@ export chronicles,strformat,pretty
 
 const hasThreadSupport* = compileOption("threads")
 
-# reason: stringview implentation
+# reason: stringview implementation
 static: doAssert NimMajor >= 2 , "Not supporting Nim < 2 !"
 
 # publicLogScope:
