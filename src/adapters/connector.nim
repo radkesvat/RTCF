@@ -90,6 +90,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
 
         try:
             trace "Writeloop write", bytes = sv.len
+            assert not self.stopped
             await procCall write(Tunnel(self), move sv)
 
         except [CancelledError, FlowError]:
@@ -130,7 +131,6 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
-            assert not self.stopped
             if sv.len != await self.socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
 

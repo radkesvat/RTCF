@@ -1,5 +1,5 @@
 import tunnel, strutils, stew/byteutils, threading/[channels], store
-import sequtils, websock/types
+import sequtils, websock/types, std/locks
 # This module unfortunately has global shared memory as part of its state
 
 logScope:
@@ -49,13 +49,27 @@ var globalTable: ptr UncheckedArray[DualChan]
 when hasThreadSupport:
     import threading/atomics
     var globalCounter: Atomic[Cid]
+    var globalLock: Lock
 else:
     var globalCounter: Cid
+
+template safeAccess(body: untyped) =
+    when hasThreadSupport:
+        globalLock.acquire()
+        try:
+            body
+        finally:
+            globalLock.release()
+    else:
+        body
+
 
 proc close(c: DualChan) = c.first.close(); c.second.close()
 template close(c: DualChanPtr) = c[].close()
 
-template globalTableHas(id: Cid): bool = not (isNil(globalTable[id].first) or isNil(globalTable[id].second))
+proc globalTableHas(id: Cid): bool =
+    safeAccess:
+        return not (isNil(globalTable[id].first) or isNil(globalTable[id].second))
 
 
 proc stop*(self: MuxAdapetr) =
@@ -100,11 +114,12 @@ proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
         except AsyncChannelError as e:
             warn "HandleCid closed, [Read]", msg = e.name, cid = cid
             {.cast(raises: []), gcsafe.}:
-                globalTable[cid].first.close()
-                globalTable[cid].first.close()
-                var copy = globalTable[cid].second
-                system.reset(globalTable[cid])
-                await copy.send nil
+                safeAccess:
+                    globalTable[cid].first.close()
+                    globalTable[cid].first.close()
+                    var copy = globalTable[cid].second
+                    system.reset(globalTable[cid])
+                    await copy.send nil
 
         except CancelledError as e:
             warn "HandleCid Canceled [Read]", msg = e.name, cid = cid
@@ -141,7 +156,7 @@ proc acceptcidloop(self: MuxAdapetr){.async.} =
         try:
             let new_cid = await self.masterChannel.recv()
             trace "acceptcidloop got a channel!", cid = new_cid
-            assert(globalTableHas new_cid)
+            safeAccess: assert(globalTableHas new_cid)
             var fut = self.handleCid(new_cid)
             self.handles.add fut
             fut.callback = proc(udata: pointer) =
@@ -183,24 +198,28 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     rse
                 else:
                     sv.shiftl MuxHeaderLen; sv
-            if globalTableHas(cid):
-                try:
-                    await globalTable[cid].second.send data
-                    data = nil
-                except AsyncChannelError:
-                    # channel is half closed ...
-                    self.store.reuse move data
-                    warn "read loop was about to write data to a half closed chanenl!", cid = cid
-                    await sleepAsync(5)
-            else:
-                case whenNotFound:
-                    of create:
-                        notice "sending create!", cid = cid
-                        self.masterChannel.sendSync cid
-                        # 1 or 2 time moving to event loop must be much faster than waiting and also enough
-                        await sleepAsync(1)
-                        # await sleepAsync(1)
-                        for i in 0 .. 100:
+
+            safeAccess:
+                if globalTableHas(cid):
+                    try:
+                        await globalTable[cid].second.send data
+                        data = nil
+                    except AsyncChannelError:
+                        # channel is half closed ...
+                        self.store.reuse move data
+                        warn "read loop was about to write data to a half closed chanenl!", cid = cid
+                        await sleepAsync(5)
+                        continue
+
+            case whenNotFound:
+                of create:
+                    notice "sending create!", cid = cid
+                    self.masterChannel.sendSync cid
+                    # 1 or 2 time moving to event loop must be much faster than waiting and also enough
+                    await sleepAsync(1)
+                    # await sleepAsync(1)
+                    for i in 0 .. 100:
+                        safeAccess:
                             if globalTableHas cid:
                                 await globalTable[cid].second.send move data
                                 notice "data is written to created channel", cid = cid
@@ -218,16 +237,16 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                                 fatal "The other thread did not handle a connection after 2 seconds of waiting !"
                                 quit(1)
 
-                            await sleepAsync(20)
+                        await sleepAsync(20)
 
-                    of sendclose:
-                        if size > 0:
-                            self.store.reuse move data
-                            trace "sending close for", cid = cid
-                            await procCall write(Tunnel(self), closePacket(self, cid))
-
-                    of nothing:
+                of sendclose:
+                    if size > 0:
                         self.store.reuse move data
+                        trace "sending close for", cid = cid
+                        await procCall write(Tunnel(self), closePacket(self, cid))
+
+                of nothing:
+                    self.store.reuse move data
 
 
     except [CancelledError, AsyncChannelError, FlowError, TransportError]:
@@ -271,11 +290,11 @@ method start(self: MuxAdapetr){.raises: [].} =
 
                         when not hasThreadSupport: inc globalCounter
 
-                        globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
-                        globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
-                        globalTable[cid].first.open()
-                        globalTable[cid].second.open()
-
+                        safeAccess:
+                            globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
+                            globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
+                            globalTable[cid].first.open()
+                            globalTable[cid].second.open()
                         self.selectedCon = (cid, addr globalTable[cid])
                         self.masterChannel.sendSync cid
 
@@ -293,13 +312,14 @@ method start(self: MuxAdapetr){.raises: [].} =
                     of Side.Left:
                         # left mode, we have been created by right Mux
                         # we find our channels,write and read to it
-                        doAssert(not globalTableHas self.selectedCon.cid)
-                        globalTable[self.selectedCon.cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
-                        globalTable[self.selectedCon.cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
-                        globalTable[self.selectedCon.cid].first.open()
-                        globalTable[self.selectedCon.cid].second.open()
+                        safeAccess:
+                            doAssert(not globalTableHas self.selectedCon.cid)
+                            globalTable[self.selectedCon.cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
+                            globalTable[self.selectedCon.cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
+                            globalTable[self.selectedCon.cid].first.open()
+                            globalTable[self.selectedCon.cid].second.open()
 
-                        self.selectedCon.dcp = addr globalTable[self.selectedCon.cid]
+                            self.selectedCon.dcp = addr globalTable[self.selectedCon.cid]
 
 
                     of Side.Right:
