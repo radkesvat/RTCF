@@ -54,6 +54,9 @@ when hasThreadSupport:
 else:
     var globalCounter: Cid
 
+var muxSaveQueue: AsyncQueue[tuple[c: Cid, d: StringView]]
+
+
 template safeAccess(body: untyped) =
     when hasThreadSupport:
         globalLock.acquire()
@@ -106,13 +109,15 @@ proc closePacket(self: MuxAdapetr, cid: Cid): StringView =
     sv.write(cid.Cid)
     return sv
 
-proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
+proc handleCid(self: MuxAdapetr, cid: Cid, firstdata: StringView = nil) {.async.} =
     var sv: StringView = nil
     while not self.stopped:
         try:
-            sv = await globalTable[cid].first.recv()
-            if sv.isNil: raise newException(AsyncChannelError, "")
-
+            if firstdata.isNil:
+                sv = await globalTable[cid].first.recv()
+                if sv.isNil: raise newException(AsyncChannelError, "")
+            else:
+                sv = firstdata
         except AsyncChannelError as e:
             warn "HandleCid closed [Read]", msg = e.name, cid = cid
             {.cast(raises: []), gcsafe.}:
@@ -126,8 +131,8 @@ proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
 
         except CancelledError as e:
             warn "HandleCid Canceled [Read]", msg = e.name, cid = cid
-            quit(1)
-            self.masterChannel.sendSync cid; return
+            # quit(1)
+            asyncCheck muxSaveQueue.put (globalTable[cid].first, nil)
 
         except CatchableError as e:
             error "HandleCid Unexpeceted Error, [Read]", name = e.name, msg = e.msg
@@ -147,7 +152,8 @@ proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
             error "HandleCid Canceled, [Write] ", msg = e.name, cid = cid
             # no need to reuse non-nil sv because write have to
             if not self.stopped: signal(self, both, close)
-            if not sv.isNil: self.masterChannel.sendSync cid
+            if not sv.isNil: asyncCheck muxSaveQueue.put (globalTable[cid].first, sv)
+
             return
         except CatchableError as e:
             error "HandleCid error, [Write]", name = e.name, msg = e.msg
@@ -155,27 +161,45 @@ proc handleCid(self: MuxAdapetr, cid: Cid) {.async.} =
 
 
 
-proc acceptcidloop(self: MuxAdapetr){.async.} =
-    while not self.stopped:
-        try:
-            let new_cid = await self.masterChannel.recv()
-            trace "acceptcidloop got a channel!", cid = new_cid
-            assert(globalTableHas new_cid)
-            var fut = self.handleCid(new_cid)
-            self.handles.add fut
-            fut.callback = proc(udata: pointer) =
-                let index = self.handles.find fut
-                if index != -1: self.handles.del index
-            asyncSpawn fut
+proc acceptcidloop(self: MuxAdapetr) {.async: (raw: true, raises: [CancelledError]).} =
+    var retFut = newFuture[void]()
 
+    proc register(cid: Cid, firstdata: StringView = nil) =
+        assert(globalTableHas cid)
+        var fut = self.handleCid(new_cid)
+        self.handles.add fut
+        fut.callback = proc(udata: pointer) =
+            let index = self.handles.find fut
+            if index != -1: self.handles.del index
+        asyncSpawn fut
 
-        except [AsyncChannelError, CancelledError]: # only means cancel !
-            trace "acceptcidloop got canceled, no longer accepting"
-            if not self.stopped: signal(self, both, close)
-            break
-        except CatchableError as e:
-            error "acceptcidloop error, stopping mux tunnel", name = e.name, msg = e.msg
-            quit(1)
+    proc restoration(){.async.} =
+        while not self.stopped:
+            var (cid, data) = await muxSaveQueue.get()
+            trace "acceptcidloop restored a cid", cid = cid
+            register(cid, data)
+
+    proc newRegisters(){.async.} =
+        while not self.stopped:
+            try:
+
+                let new_cid = await self.masterChannel.recv()
+                trace "acceptcidloop restored a cid", cid = new_cid
+                register(new_cid, data)
+            except AsyncChannelError: # only means cancel !
+                error "acceptcidloop [newRegisters] got AsyncChannelError!"
+                if not self.stopped: signal(self, both, close)
+
+    var restore_fut = restoration()
+    var newregs_fut = newRegisters()
+
+    retFut.callback = proc(udata: pointer) =
+        trace "acceptcidloop finish"
+
+    retFut.cancelCallback = proc(udata: pointer) =
+        trace "acceptcidloop canceled"
+        restore_fut.cancelSoon()
+        newregs_fut.cancelSoon()
 
 
 proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
@@ -278,6 +302,8 @@ method init(self: MuxAdapetr, name: string, master: AsyncChannel[Cid], store: St
     self.masterChannel = master
     self.selectedCon.cid = cid
     procCall init(Adapter(self), name, hsize = 0)
+    if muxSaveQueue.isNil:
+        muxSaveQueue = newAsyncQueue[chan]()
 
 
 method start(self: MuxAdapetr){.raises: [].} =
