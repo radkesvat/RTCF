@@ -170,7 +170,6 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                         {.cast(raises: []), gcsafe.}: globalTable[cid].second.close()
                         globalTable[cid].first.unregister()
                     of AfterGfw:
-                        notice "destroying"
                         {.cast(raises: []), gcsafe.}:
                             globalTable[cid].first.close()
                             while globalTable[cid].first.dataleft() > 0:
@@ -449,6 +448,8 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
         self.stop; raise e
 
 method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
+    if self.stopped: raise newException(AsyncChannelError, message = "closed pipe")
+
     try:
         case self.location:
             of BeforeGfw:
