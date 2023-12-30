@@ -137,7 +137,7 @@ when not(defined(windows)):
     let loop = getThreadDispatcher()
     if loop.contains(fd):
       ? unregister2(fd)
-    # else: raiseAssert "whaaat"
+    else: raiseAssert "whaaat"
     # ok()
     if closeFd(cint(fd)) != 0:
       err(osLastError())
@@ -148,7 +148,7 @@ proc unRegisterThread*(signal: ThreadSignalPtr)=
   let loop = getThreadDispatcher()
   if loop.contains(signal[].efd):
     unregister2(signal[].efd).value()
-  else: raiseAssert "whaaat"
+  # else: raiseAssert "whaaat"
 
 
 proc close*(signal: ThreadSignalPtr): Result[void, string] =
