@@ -124,7 +124,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
             quit(1)
 
 
-        if self.socket == nil:
+        if not self.stopped and self.socket == nil:
             if await self.connect():
                 self.writeLoopFut = self.writeloop()
                 asyncSpawn self.writeLoopFut
@@ -201,10 +201,10 @@ proc stop*(self: ConnectorAdapter) =
 method signal*(self: ConnectorAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
 
     if sig == breakthrough: doAssert self.stopped, "break through signal while still running?"
+    if sig == close or sig == stop: self.stop()
 
     procCall signal(Tunnel(self), dir, sig, chain)
 
     if sig == start: self.start()
-    if sig == close or sig == stop: self.stop()
 
 

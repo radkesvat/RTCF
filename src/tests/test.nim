@@ -1,20 +1,25 @@
 import chronos, chronos/timer, threading/channels
 
 
-proc doo()=
-    try:
-        raise newException(CancelledError,"hi")
-    except CatchableError as e:
-        echo "catch"; raise e
-    finally:
-        echo "fin"
+var chan = newAsyncChannel[int](10)
+chan.open()
 
-proc g()=
-    try:
-        doo()
-    except :
-        echo "g"
-    finally:
-        echo "gfin"
-g()
+proc listen(){.async.}=
+    echo $(await chan.recv())
+
+proc destroy(){.async.}=
+    {.cast(raises: []), gcsafe.}:
+
+        await sleepAsync(4.seconds)
+        chan.close()
+        echo "closed1"
+        await sleepAsync(4.seconds)
+        chan.close()
+        echo "closed2"
+        await sleepAsync(4.seconds)
+
+
+asyncCheck listen()
+asyncCheck destroy()
+runForever()
         

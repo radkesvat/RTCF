@@ -101,6 +101,7 @@ proc close*[Msg](chan: AsyncChannel[Msg]) =
   ## Close channel ``chan``.
   chan.acquireLock()
   if chan.refCount == 0:
+    assert chan.count == 0
     if not(isNil(chan.data)):
       deallocShared(cast[pointer](chan.data))
     chan.deinitLocks()
@@ -260,6 +261,14 @@ proc recvSync*[Msg](chan: AsyncChannel[Msg]): Msg =
 
   finally:
     chan.releaseLock()
+
+
+
+proc dataLeft*[Msg](chan: AsyncChannel[Msg]):int =
+  chan.acquireLock()
+  result = chan.count
+  chan.releaseLock()
+
 
 proc hasListener*[Msg](chan: AsyncChannel[Msg]): bool =
   chan.acquireLock()
