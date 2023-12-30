@@ -1,5 +1,6 @@
 import strutils
 
+
 import chronos/[handles, transport,threadsync]
 
 const hasThreadSupport = compileOption("threads")
@@ -38,9 +39,9 @@ proc deinitLocks(rchan: RawAsyncChannel) {.inline.} =
   ## Deinitialize and close OS locks.
 
 
-  discard close(rchan.eventNotEmpty)
+  close(rchan.eventNotEmpty).value()
   if rchan.maxItems > 0:
-    discard close(rchan.eventNotFull)
+    close(rchan.eventNotFull).value()
   rchan.releaseLock()
 
   when hasThreadSupport:
@@ -265,10 +266,47 @@ proc recvSync*[Msg](chan: AsyncChannel[Msg]): Msg =
     chan.releaseLock()
 
 
+proc unsafeRecvSync*[Msg](chan: AsyncChannel[Msg]): Msg =
+  ## Blocking receive message ``Msg`` from channel ``chan``.
+  chan.acquireLock()
+  try:
+    # if chan.refCount == 0:
+    #   raiseChannelClosed()
+
+    while chan.count <= 0:
+      chan.releaseLock()
+      let res = chan.eventNotEmpty.waitSync(InfiniteDuration).tryGet
+      chan.acquireLock()
+      if not res:
+        raiseChannelFailed()
+
+    rawRecv(chan, addr result, sizeof(Msg))
+
+    if chan.maxItems > 0:
+      discard chan.eventNotFull.fireSync()
+
+  finally:
+    chan.releaseLock()
+
+
+
 
 proc dataLeft*[Msg](chan: AsyncChannel[Msg]):int =
   chan.acquireLock()
   result = chan.count
+  chan.releaseLock()
+
+proc unregister*[Msg](chan: AsyncChannel[Msg]) =
+  chan.acquireLock()
+
+  when defined(linux):
+    chan.eventNotEmpty.unRegisterThread()
+    if chan.maxItems > 0:
+      chan.eventNotFull.unRegisterThread()
+
+  else:
+    discard # god knows what happens in other os
+
   chan.releaseLock()
 
 

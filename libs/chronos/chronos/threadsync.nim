@@ -137,10 +137,19 @@ when not(defined(windows)):
     let loop = getThreadDispatcher()
     if loop.contains(fd):
       ? unregister2(fd)
+    # else: raiseAssert "whaaat"
+    # ok()
     if closeFd(cint(fd)) != 0:
       err(osLastError())
     else:
       ok()
+
+proc unRegisterThread*(signal: ThreadSignalPtr)=
+  let loop = getThreadDispatcher()
+  if loop.contains(signal[].efd):
+    unregister2(signal[].efd).value()
+  else: raiseAssert "whaaat"
+
 
 proc close*(signal: ThreadSignalPtr): Result[void, string] =
   ## Close ThreadSignal object and free all the resources.

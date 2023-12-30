@@ -24,13 +24,18 @@ proc startCoreConnector(threadID: int) {.async.} =
                 con_adapter.signal(both, start)
 
 
-        
+proc logs(){.async.}=
+    while true:
+        echo "left"
+        await sleepAsync(1000)
 proc run*(thread: int) {.async.} =
     await sleepAsync(200)
     # if globals.accept_udp:
     #     info "Mode Iran (Tcp + Udp)"
     # else:
     #     info "Mode Iran"
+    asyncCheck logs()
+
     dynamicLogScope(thread):
         await startCoreConnector(thread)
 

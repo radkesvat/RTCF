@@ -28,6 +28,8 @@ type
         isMultiPort: bool
         targetIp: IpAddress
         targetPort: Port
+        connectingFut: Future[void]
+        test:bool
 
 
 const
@@ -38,6 +40,8 @@ proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.so
 
 proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
     assert self.socket == nil
+    assert not self.test
+    self.test = true
     var (tident, _) = self.findByType(TransportIdentTunnel, right)
     doAssert tident != nil, "connector adapter could not locate TransportIdentTunnel! it is required"
     self.protocol = if tident.isTcp: Tcp else: Udp
@@ -46,6 +50,8 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
         var (port_tunnel, _) = self.findByType(PortTunnel, right)
         doAssert port_tunnel != nil, "connector adapter could not locate PortTunnel! it is required"
         self.targetPort = port_tunnel.getReadPort()
+
+    self.connectingFut = newFuture[void]()
     if self.protocol == Tcp:
         var target = initTAddress(self.targetIp, self.targetPort)
         for i in 0 .. 4:
@@ -53,11 +59,12 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
                 var flags = {SocketFlags.TcpNoDelay, SocketFlags.ReuseAddr}
                 self.socket = await connect(target, flags = flags)
                 trace "connected to the target core"
+                self.connectingFut.complete()
                 return true
             except CatchableError as e:
                 error "could not connect TCP to the core! ", name = e.name, msg = e.msg
                 if i != 4: notice "retrying ...", tries = i
-                else: error "gauve up connecting to core", tries = i; return false
+                else: error "give up connecting to core", tries = i; self.connectingFut = nil; return false
     else:
         quit(1)
 
@@ -88,7 +95,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
             error "Writeloop Unexpected Error, [Read]", name = e.name, msg = e.msg
             quit(1)
 
-       
+
         try:
             trace "Writeloop write", bytes = sv.len
             if self.stopped: return
@@ -98,7 +105,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
         except [CancelledError, FlowError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Write]", msg = e.name
-            if sv != nil:self.store.reuse sv
+            if sv != nil: self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
@@ -125,7 +132,9 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
 
         if not self.stopped and self.socket == nil:
-            if await self.connect():
+            if self.connectingFut != nil and not self.connectingFut.completed():
+                await self.connectingFut
+            elif await self.connect():
                 self.writeLoopFut = self.writeloop()
                 asyncSpawn self.writeLoopFut
             else:

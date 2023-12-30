@@ -48,13 +48,14 @@ proc startWebsocketConnector(threadID: int) {.async.} =
 
 proc logs(){.async.}=
     while true:
-        echo publicStore.available.len()
-        await sleepAsync(500)
+        echo "right"
+        await sleepAsync(1000)
+
 
 proc run*(thread: int) {.async.} =
     await sleepAsync(200)
     #     info "Mode Kharej"
-    # asyncCheck logs()
+    asyncCheck logs()
 
     dynamicLogScope(thread):
         await startWebsocketConnector(thread)
