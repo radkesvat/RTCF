@@ -159,6 +159,7 @@ proc send*[Msg](chan: AsyncChannel[Msg], msg: Msg) {.async.} =
   ## internal channel queue is full.
   chan.acquireLock()
   if chan.refCount == 0:
+    chan.releaseLock()
     raiseChannelClosed()
 
   if chan.maxItems > 0:
@@ -216,6 +217,7 @@ proc recv*[Msg](chan: AsyncChannel[Msg]): Future[Msg] {.async.} =
   var rmsg: Msg
   chan.acquireLock()
   if chan.refCount == 0:
+    chan.releaseLock()
     raiseChannelClosed()
 
   while chan.count <= 0:

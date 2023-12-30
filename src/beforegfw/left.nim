@@ -51,6 +51,11 @@ proc startTcpListener(threadID: int) {.async.} =
         await server.join()
 
 
+proc logs(){.async.}=
+    while true:
+        echo "left"
+        await sleepAsync(1000)
+
 
 proc run*(thread: int) {.async.} =
     await sleepAsync(200)
@@ -58,6 +63,7 @@ proc run*(thread: int) {.async.} =
     #     info "Mode Iran (Tcp + Udp)"
     # else:
     #     info "Mode Iran"
+    discard logs()
     dynamicLogScope(thread):
         await startTcpListener(thread)
 

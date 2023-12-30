@@ -78,6 +78,11 @@ proc startWebsocketServer(threadID: int) {.async.} =
         trace "Started Ws Server", internalPort = globals.cf_listen_port
         await server.join()
 
+proc logs(){.async.}=
+    while true:
+        echo "right"
+        await sleepAsync(1000)
+
 
 proc run*(thread: int) {.async.} =
     await sleepAsync(200)
@@ -85,6 +90,7 @@ proc run*(thread: int) {.async.} =
     #     info "Mode Iran (Tcp + Udp)"
     # else:
     #     info "Mode Iran"
+    asyncCheck logs()
     dynamicLogScope(thread):
         await startWebsocketServer(thread)
 

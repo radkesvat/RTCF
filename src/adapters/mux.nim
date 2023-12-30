@@ -86,9 +86,11 @@ proc stop*(self: MuxAdapetr) =
                     v = await schan.recv()
                 except: discard
                 if v == nil:
-                    schan.close(); fchan.close();
+                    schan.close()
+                    fchan.close()
                     safeAccess:
                         system.reset(globalTable[cid])
+                    
                     break
                 else:
                     store.reuse v
@@ -103,7 +105,7 @@ proc stop*(self: MuxAdapetr) =
                 if self.location == BeforeGfw:
                     asyncSpawn flush(self.selectedCon.dcp.second, self.selectedCon.dcp.first, self.selectedCon.cid, self.store)
                 asyncSpawn self.selectedCon.dcp.first.send nil
-                {.cast(raises: []), gcsafe.}: self.selectedCon.dcp.first.close()
+                # {.cast(raises: []), gcsafe.}: self.selectedCon.dcp.first.close()
                 system.reset(self.selectedCon)
 
 
@@ -152,10 +154,12 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 trace "Sending close from", cid = cid
                 case self.location:
                     of BeforeGfw:
+                        {.cast(raises: []), gcsafe.}: globalTable[cid].first.close()
                         asyncCheck globalTable[cid].second.send nil
                         {.cast(raises: []), gcsafe.}: globalTable[cid].second.close()
                     of AfterGfw:
                         {.cast(raises: []), gcsafe.}:
+                            globalTable[cid].first.close()
                             globalTable[cid].first.close()
                             while globalTable[cid].second.dataleft() > 0:
                                 self.store.reuse globalTable[cid].second.recvSync()
@@ -210,7 +214,7 @@ proc acceptcidloop(self: MuxAdapetr) {.async: (raw: true, raises: [CancelledErro
             try:
 
                 let new_cid = await self.masterChannel.recv()
-                trace "acceptcidloop restored a cid", cid = new_cid
+                trace "acceptcidloop got a cid", cid = new_cid
                 register(new_cid, nil)
             except AsyncChannelError: # only means cancel !
                 error "acceptcidloop [newRegisters] got AsyncChannelError!"
