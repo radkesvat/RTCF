@@ -85,8 +85,9 @@ proc stop*(self: MuxAdapetr) =
             if self.readChanFut != nil and not self.readChanFut.finished():
                 await self.readChanFut.cancelAndWait()
                 echo "canceled!"
-            var d:StringView = nil
             while true:
+                var d:StringView = nil
+
                 try: d = await schan.recv() except:discard
                 if d != nil : self.store.reuse d
                 else:
@@ -113,11 +114,10 @@ proc stop*(self: MuxAdapetr) =
                     asyncSpawn self.selectedCon.dcp.first.send nil
                     system.reset(self.selectedCon)
                 else:
-                    self.selectedCon.dcp.first.send(nil).callback=
-                        proc(udata:pointer)=
-                        self.selectedCon.dcp.first.unregister()
-                        self.selectedCon.dcp.second.unregister()
-                        system.reset(self.selectedCon)
+                    discard self.selectedCon.dcp.first.send(nil,true)
+                    self.selectedCon.dcp.first.unregister()
+                    self.selectedCon.dcp.second.unregister()
+                    system.reset(self.selectedCon)
                
 
 
@@ -166,9 +166,8 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 case self.location:
                     of BeforeGfw:
                         {.cast(raises: []), gcsafe.}: globalTable[cid].first.close()
-                        asyncCheck globalTable[cid].second.send nil
+                        asyncCheck globalTable[cid].second.send(nil,true)
                         {.cast(raises: []), gcsafe.}: globalTable[cid].second.close()
-                        globalTable[cid].first.unregister()
                         globalTable[cid].first.unregister()
                     of AfterGfw:
                         notice "destroying"

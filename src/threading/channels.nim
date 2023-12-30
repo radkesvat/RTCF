@@ -155,7 +155,7 @@ proc rawSend(rchan: RawAsyncChannel, pbytes: pointer, nbytes: int) =
   inc(rchan.count)
   rchan.wr = (rchan.wr + 1) and rchan.mask
 
-proc send*[Msg](chan: AsyncChannel[Msg], msg: Msg) {.async.} =
+proc send*[Msg](chan: AsyncChannel[Msg], msg: Msg, unregister:bool = false) {.async.} =
   ## Send message ``msg`` over channel ``chan``. This procedure will wait if
   ## internal channel queue is full.
   chan.acquireLock()
@@ -180,6 +180,11 @@ proc send*[Msg](chan: AsyncChannel[Msg], msg: Msg) {.async.} =
          
   rawSend(chan, unsafeAddr msg, sizeof(Msg))
   discard chan.eventNotEmpty.fireSync()
+
+  if unregister:
+    chan.eventNotEmpty.unRegisterThread()
+    if chan.maxItems > 0:
+      chan.eventNotFull.unRegisterThread()
 
   chan.releaseLock()
 
@@ -299,13 +304,10 @@ proc dataLeft*[Msg](chan: AsyncChannel[Msg]):int =
 proc unregister*[Msg](chan: AsyncChannel[Msg]) =
   chan.acquireLock()
 
-  when defined(linux):
-    chan.eventNotEmpty.unRegisterThread()
-    if chan.maxItems > 0:
-      chan.eventNotFull.unRegisterThread()
+  chan.eventNotEmpty.unRegisterThread()
+  if chan.maxItems > 0:
+    chan.eventNotFull.unRegisterThread()
 
-  else:
-    discard # god knows what happens in other os
 
   chan.releaseLock()
 

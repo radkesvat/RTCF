@@ -145,9 +145,11 @@ when not(defined(windows)):
       ok()
 
 proc unRegisterThread*(signal: ThreadSignalPtr)=
-  let loop = getThreadDispatcher()
-  if loop.contains(signal[].efd):
-    unregister2(signal[].efd).value()
+  when defined(linux):
+    let loop = getThreadDispatcher()
+    if loop.contains(signal[].efd):
+      unregister2(signal[].efd).value()
+  else: discard
   # else: raiseAssert "whaaat"
 
 
