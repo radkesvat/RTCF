@@ -55,14 +55,14 @@ proc writeloop(self: ConnectorAdapter){.async.} =
                 trace "Writeloop read", bytes = actual
             sv.setLen(actual)
 
-        except [CancelledError, TransportError, AsyncError]:
+        except [CancelledError, TransportError, AsyncError,AsyncChannelError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Read]", msg = e.name
             self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
-            error "Writeloop Unexpected Error, [Read]", name = e.name, msg = e.msg
+            error "Writeloop Unexpected Error [Read]", name = e.name, msg = e.msg
             quit(1)
 
 
@@ -72,14 +72,14 @@ proc writeloop(self: ConnectorAdapter){.async.} =
 
             await procCall write(Tunnel(self), move sv)
 
-        except [CancelledError, FlowError, AsyncError]:
+        except [CancelledError, FlowError, AsyncError,AsyncChannelError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Write]", msg = e.name
             if sv != nil: self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
-            error "Writeloop Unexpected Error, [Write]", name = e.name, msg = e.msg
+            error "Writeloop Unexpected Error [Write]", name = e.name, msg = e.msg
             quit(1)
 
 
