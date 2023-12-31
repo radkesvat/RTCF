@@ -10,8 +10,11 @@ logScope:
     topic = "Iran RightSide"
 
 var foundpeer = false
+var sw:WSSession = nil
+var sr:WSSession = nil
 
 proc handle(request: HttpRequest) {.async.} =
+
     trace "Handling request:", uri = request.uri.path
     var address = request.stream.writer.tsource.remoteAddress()
 
@@ -35,11 +38,17 @@ proc handle(request: HttpRequest) {.async.} =
 
         # trace "Websocket handshake completed"
         trace "Got Websocket connection", form = address
+        {.cast(raises: []), gcsafe.}:
+            if sw == nil:
+                sw = ws
 
-        var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
-        var ws_adapter = newWebsocketAdapter(socket = ws, store = publicStore)
-        mux_adapter.chain(ws_adapter)
-        mux_adapter.signal(both, start)
+            else:
+                sr = ws
+                    
+                var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
+                var ws_adapter = newWebsocketAdapter(socketr = sr,socketw = sw, store = publicStore)
+                mux_adapter.chain(ws_adapter)
+                mux_adapter.signal(both, start)
 
 
 

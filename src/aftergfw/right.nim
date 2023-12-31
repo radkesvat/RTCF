@@ -11,7 +11,7 @@ logScope:
 
 
 
-proc connect() {.async.} =
+proc connect():Future[WSSession] {.async.} =
     {.cast(gcsafe).}:
         try:
             let deflateFactory = deflateFactory()
@@ -29,12 +29,7 @@ proc connect() {.async.} =
                         path = "/ws" & $globals.sh1,
                         factories = [deflateFactory])
 
-            var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
-            var ws_adapter = newWebsocketAdapter(socket = ws, store = publicStore)
-            mux_adapter.chain(ws_adapter)
-            mux_adapter.signal(both, start)
-            await ws.stream.reader.join()
-
+            
         except [WebSocketError, HttpError]:
             var e = getCurrentException()
             error "Websocket error", name = e.name, msg = e.msg
@@ -44,7 +39,16 @@ proc connect() {.async.} =
 
 proc startWebsocketConnector(threadID: int) {.async.} =
     trace "Initiating connection"
-    await connect()
+    var ws_r = await connect()
+    var ws_w = await connect()
+    
+    var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
+    var ws_adapter = newWebsocketAdapter(socketr = ws_r,socketw = ws_w, store = publicStore)
+    mux_adapter.chain(ws_adapter)
+    mux_adapter.signal(both, start)
+
+    await ws_w.stream.reader.join()
+
 
 proc logs(){.async.}=
     while true:

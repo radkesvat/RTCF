@@ -16,7 +16,8 @@ logScope:
 
 type
     WebsocketAdapter* = ref object of Adapter
-        socket: WSSession
+        socketw: WSSession
+        socketr: WSSession
         store: Store
 
 
@@ -28,25 +29,27 @@ proc stop*(self: WebsocketAdapter) =
     if not self.stopped:
         trace "stopping"
         self.stopped = true
-        asyncSpawn self.socket.close()
+        asyncSpawn self.socketr.close()
+        asyncSpawn self.socketw.close()
 
-method init(self: WebsocketAdapter, name: string, socket: WSSession, store: Store) {.raises: [].} =
-    self.socket = socket
+method init(self: WebsocketAdapter, name: string, socketr: WSSession,socketw: WSSession,store: Store) {.raises: [].} =
+    self.socketr = socketr
+    self.socketw = socketw
     self.store = store
     procCall init(Adapter(self), name, hsize = 0)
 
 
 
-proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, store: Store): WebsocketAdapter {.raises: [].} =
+proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,socketw: WSSession, store: Store): WebsocketAdapter {.raises: [].} =
     result = new WebsocketAdapter
-    result.init(name, socket, store)
+    result.init(name, socketr,socketw, store)
     trace "Initialized", name
 
 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         rp.bytes(byteseq):
-            await self.socket.send(byteseq, Binary)
+            await self.socketw.send(byteseq, Binary)
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
         self.stop; raise e
@@ -59,7 +62,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     try:
         trace "asking for ", bytes = bytes
         sv.reserve bytes
-        var bytesread = await self.socket.recv(cast[ptr byte](sv.buf), bytes)
+        var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
         trace "received", bytes = bytesread
 
         if bytesread == bytes:
