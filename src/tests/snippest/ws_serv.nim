@@ -69,7 +69,7 @@ when isMainModule:
           except CatchableError as exc:
             error "Transport error", exc = exc.msg
 
-      asyncCheck accepts()
+      asyncSpawn accepts()
     else:
       server.handler = handle
       server.start()

@@ -19,7 +19,7 @@ proc destroy(){.async.}=
         await sleepAsync(4.seconds)
 
 
-asyncCheck listen()
-asyncCheck destroy()
+asyncSpawn listen()
+asyncSpawn destroy()
 runForever()
         

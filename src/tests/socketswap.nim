@@ -23,7 +23,7 @@ proc run(id: int) {.thread, gcsafe.} =
     #                 error "Transport error", exc = exc.msg
     #             server.sock.unregister()
 
-    # asyncCheck accepts()
+    # asyncSpawn accepts()
     # runForever()
 
 initLock mylock

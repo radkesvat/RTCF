@@ -30,6 +30,17 @@ proc stop*(self: WebsocketAdapter) =
         asyncSpawn self.socketr.close()
         asyncSpawn self.socketw.close()
 
+proc keepAlive(self: WebsocketAdapter){.async.}=
+    while not self.stopped:
+        try:
+            await sleepAsync(30.seconds)
+            await self.socketw.ping(@[1.byte,2.byte,3.byte])
+        except :
+            error "Failed to ping socket"
+            self.stop()
+            
+
+
 method init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSSession, store: Store) {.raises: [].} =
     self.socketr = socketr
     self.socketw = socketw
@@ -82,7 +93,8 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 proc start(self: WebsocketAdapter) =
     {.cast(raises: []).}:
         trace "starting"
-
+        asyncSpawn keepAlive(self)
+        
 
 method signal*(self: WebsocketAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
     if sig == start: self.start()

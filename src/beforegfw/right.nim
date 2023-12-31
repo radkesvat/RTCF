@@ -80,7 +80,7 @@ proc startWebsocketServer(threadID: int) {.async.} =
                 except CatchableError as e:
                     error "Https Accept error", name = e.name, msg = e.msg
 
-        asyncCheck accepts()
+        asyncSpawn accepts()
 
 
         trace "Started Ws Server", internalPort = globals.cf_listen_port
@@ -98,7 +98,7 @@ proc run*(thread: int) {.async.} =
     #     info "Mode Iran (Tcp + Udp)"
     # else:
     #     info "Mode Iran"
-    # asyncCheck logs()
+    # asyncSpawn logs()
     dynamicLogScope(thread):
         await startWebsocketServer(thread)
 

@@ -141,7 +141,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             warn "HandleCid Canceled [Read]", msg = e.name, cid = cid
             # quit(1)
             notice "saving ", cid = cid
-            asyncCheck muxSaveQueue.send (cid, nil)
+            asyncSpawn muxSaveQueue.send (cid, nil)
             return
         except CatchableError as e:
             error "HandleCid Unexpeceted Error, [Read]", name = e.name, msg = e.msg
@@ -172,7 +172,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             # no need to reuse non-nil sv because write have to
             if not sv.isNil:
                 notice "saving ", cid = cid
-                asyncCheck muxSaveQueue.send (cid, sv)
+                asyncSpawn muxSaveQueue.send (cid, sv)
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:

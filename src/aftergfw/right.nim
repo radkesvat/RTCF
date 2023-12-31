@@ -10,6 +10,7 @@ logScope:
     topic = "Kharej RightSide"
 
 
+const parallel_cons = 8
 
 proc connect():Future[WSSession] {.async.} =
     {.cast(gcsafe).}:
@@ -36,8 +37,7 @@ proc connect():Future[WSSession] {.async.} =
             quit(1)
 
 
-
-proc startWebsocketConnector(threadID: int) {.async.} =
+proc standAloneChain(){.async.} =
     trace "Initiating connection"
     var ws_r = await connect()
     var ws_w = await connect()
@@ -47,7 +47,6 @@ proc startWebsocketConnector(threadID: int) {.async.} =
     mux_adapter.chain(ws_adapter)
     mux_adapter.signal(both, start)
 
-  
 
 
 proc logs(){.async.}=
@@ -59,9 +58,10 @@ proc logs(){.async.}=
 proc run*(thread: int) {.async.} =
     await sleepAsync(200)
     #     info "Mode Kharej"
-    # asyncCheck logs()
+    # asyncSpawn logs()
 
     dynamicLogScope(thread):
-        await startWebsocketConnector(thread)
+        for i in 0 ..< parallel_cons:
+            await standAloneChain()
 
 

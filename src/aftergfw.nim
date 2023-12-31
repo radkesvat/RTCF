@@ -48,13 +48,13 @@ when NimMajor >= 2 and hasThreadSupport:
 proc rightThread(threadID: int){.thread.} =
     warn "RightThread spawend"
     var disp = getThreadDispatcher()
-    asyncCheck right.run(threadID)
+    asyncSpawn right.run(threadID)
     runForever()
 
 proc leftThread(threadID: int){.thread.} =
     warn "LeftThread spawend"
     var disp = getThreadDispatcher()
-    asyncCheck left.run(threadID)
+    asyncSpawn left.run(threadID)
     runForever()
 
 
