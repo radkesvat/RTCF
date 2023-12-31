@@ -101,7 +101,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
             if sc:
                 await fchan.send(closePacket(self, cid))
             await fchan.send(nil, true)
-            
+
                         
 
     if not self.stopped:
@@ -405,7 +405,7 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
                         rp.write(total_len)
                         rp.shiftl CidHeaderLen
                         rp.write(self.selectedCon.cid)
-                        self.writeChanFut = await self.selectedCon.dcp.first.send(rp)
+                        self.writeChanFut =  self.selectedCon.dcp.first.send(rp)
                         await self.writeChanFut
                     of Side.Right:
                         doAssert false, "this will not happen"
@@ -419,7 +419,7 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
                         rp.write(total_len)
                         rp.shiftl CidHeaderLen
                         rp.write(self.selectedCon.cid)
-                        self.writeChanFut = await self.selectedCon.dcp.first.send(rp)
+                        self.writeChanFut =  self.selectedCon.dcp.first.send(rp)
                         await self.writeChanFut
 
                     of Side.Right:
@@ -447,7 +447,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         assert sv != nil
                         copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
                         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        assert self.selectedCon.cid == cid:
+                        assert self.selectedCon.cid == cid
                            
                            
                         debug "read", bytes = size
@@ -473,7 +473,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         assert sv != nil
                         copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
                         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        assert self.selectedCon.cid == cid:
+                        assert self.selectedCon.cid == cid
 
                         debug "read", bytes = size
 
