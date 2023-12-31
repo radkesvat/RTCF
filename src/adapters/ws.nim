@@ -47,9 +47,7 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         rp.bytes(byteseq):
-            echo " try write ", byteseq.len
             await self.socketw.send(byteseq, Binary)
-            echo " written   ", byteseq.len
 
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
@@ -63,9 +61,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     try:
         trace "asking for ", bytes = bytes
         sv.reserve bytes
-        echo " try read ", bytes
         var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
-        echo " readed    ", bytes
 
         trace "received", bytes = bytesread
 
