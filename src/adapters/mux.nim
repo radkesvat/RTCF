@@ -43,7 +43,8 @@ const
     CidHeaderLen = 2
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
-    ConnectionChanFixedSize = 1
+    ConnectionChanFixedSizeW = 1
+    ConnectionChanFixedSizeR = 0
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -94,11 +95,13 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
             schan.close()
             schan.drain(proc(x:StringView) = (if x != nil: self.store.reuse x))
 
-            if sc: await fchan.send(closePacket(self, cid))
+            if sc:
+                # echo "close-out: ",cid
+                await fchan.send(closePacket(self, cid))
             await fchan.send(nil, true)
 
     if not self.stopped:
-        echo "stop called for ",self.selectedCon.cid
+        # echo "stop:     ",self.selectedCon.cid
 
         trace "stopping"
         self.stopped = true
@@ -149,19 +152,18 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             if sv.isNil:
                 {.cast(raises: []), gcsafe.}:
                     var copy = globalTable[cid]
+                    # echo "destroy ! ", cid
                     safeAccess:
                         system.reset(globalTable[cid])
                     copy.first.close()
                     copy.first.close()
                     copy.second.drain(proc(x:StringView) = (if x != nil: self.store.reuse x))
-
-
                     copy.second.close()
                     
-
                 return
             else:
                 trace "Sending data from", cid = cid
+
                 await procCall write(Tunnel(self), move sv)
 
         except [CancelledError, AsyncStreamError, TransportError, FlowError, WebSocketError]:
@@ -224,7 +226,6 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
     #read data from right adapetr, send it to the right chan
     var data: StringView = nil
     assert not self.stopped
-
     try:
         while not self.stopped:
             #reads exactly MuxHeaderLen size
@@ -245,6 +246,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 else:
                     sv.shiftl MuxHeaderLen; sv
 
+            # if(size == 0): echo "close-in:   ",cid
 
             if globalTableHas(cid):
                 try:
@@ -262,14 +264,16 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     continue
 
             else:
-                case whenNotFound:
-                    of create:
-                        if size == 0: self.store.reuse move data; continue # dont create a chan for a close sig!!!
+                if size == 0: self.store.reuse move data; continue # dont do anything
 
+                case whenNotFound:
+
+                    of create:
+                        # echo "make:      ",cid
                         notice "creating left channels", cid = cid
                         safeAccess:
-                            globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
-                            globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
+                            globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeW)
+                            globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeR)
                             globalTable[cid].first.open()
                             globalTable[cid].second.open()
 
@@ -283,13 +287,13 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         asyncSpawn fut
 
                         await globalTable[cid].second.send move data
-                        echo "sending ", cid
                         self.masterChannel.sendSync cid
 
                     of sendclose:
                         if size > 0:
                             self.store.reuse move data
                             trace "sending close for", cid = cid
+                            # echo "close-back:  ",cid
                             await procCall write(Tunnel(self), closePacket(self, cid))
                         else:
                             self.store.reuse move data
@@ -339,10 +343,12 @@ method start(self: MuxAdapetr){.raises: [].} =
                         when not hasThreadSupport: inc globalCounter
 
                         safeAccess:
-                            globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
-                            globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
+                            globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeW)
+                            globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeR)
                             globalTable[cid].first.open()
                             globalTable[cid].second.open()
+
+                        # echo "make:      ",cid
 
                         self.selectedCon = (cid, addr globalTable[cid])
                         self.masterChannel.sendSync cid
@@ -484,7 +490,6 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
 
     except CatchableError as e:
-        echo "didnt read"
         self.stop(); raise e
 
 

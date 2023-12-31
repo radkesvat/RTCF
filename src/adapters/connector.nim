@@ -34,7 +34,7 @@ type
 
 
 const
-    bufferSize = 4096
+    bufferSize = 8192
 
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
@@ -150,6 +150,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
             if sv.len != await self.socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
+
 
         except [CancelledError, FlowError, TransportError, AsyncStreamError]:
             var e = getCurrentException()

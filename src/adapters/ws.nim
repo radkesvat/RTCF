@@ -21,8 +21,6 @@ type
         store: Store
 
 
-const
-    bufferSize = 4096
 
 
 proc stop*(self: WebsocketAdapter) =
@@ -32,7 +30,7 @@ proc stop*(self: WebsocketAdapter) =
         asyncSpawn self.socketr.close()
         asyncSpawn self.socketw.close()
 
-method init(self: WebsocketAdapter, name: string, socketr: WSSession,socketw: WSSession,store: Store) {.raises: [].} =
+method init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSSession, store: Store) {.raises: [].} =
     self.socketr = socketr
     self.socketw = socketw
     self.store = store
@@ -40,16 +38,19 @@ method init(self: WebsocketAdapter, name: string, socketr: WSSession,socketw: WS
 
 
 
-proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,socketw: WSSession, store: Store): WebsocketAdapter {.raises: [].} =
+proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession, socketw: WSSession, store: Store): WebsocketAdapter {.raises: [].} =
     result = new WebsocketAdapter
-    result.init(name, socketr,socketw, store)
+    result.init(name, socketr, socketw, store)
     trace "Initialized", name
 
 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         rp.bytes(byteseq):
+            echo " try write ", byteseq.len
             await self.socketw.send(byteseq, Binary)
+            echo " written   ", byteseq.len
+
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
         self.stop; raise e
@@ -62,7 +63,10 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     try:
         trace "asking for ", bytes = bytes
         sv.reserve bytes
+        echo " try read ", bytes
         var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
+        echo " readed    ", bytes
+
         trace "received", bytes = bytesread
 
         if bytesread == bytes:
