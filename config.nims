@@ -21,7 +21,7 @@ const gc = "orc" # refc(thread local) | boehm
 
 const threads = true
 
-const enable_chronicles = false
+const enable_chronicles = true
 
 template outFile(dir, name: string): string = dir / name & (when defined(windows): ".exe" else: "")
 
