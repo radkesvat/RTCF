@@ -257,7 +257,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 except AsyncChannelError as e:
                     # channel is half closed ...
                     self.store.reuse move data
-                    warn "read loop was about to write data to a half closed chanenl!",msg=e.msg, cid = cid
+                    warn "read loop was about to write data to a half closed chanenl!",msg=e.msg,size=sv.len, cid = cid
                     await sleepAsync(5)
                     continue
 

@@ -1,7 +1,7 @@
 import chronos, chronos/transports/[datagram, ipnet], chronos/osdefs
 import adapters/[ws, connection, mux, connector]
 import tunnel, tunnels/[port, tcp, udp, transportident]
-import store, shared ,httputils
+import store, shared, httputils
 import websock/[websock, extensions/compression/deflate]
 
 from globals import nil
@@ -10,19 +10,19 @@ logScope:
     topic = "Iran RightSide"
 
 var foundpeer = false
-var sw:WSSession = nil
-var sr:WSSession = nil
+var sw: WSSession = nil
+var sr: WSSession = nil
 
 proc handle(request: HttpRequest) {.async.} =
 
     trace "Handling request:", uri = request.uri.path
     var address = request.stream.writer.tsource.remoteAddress()
 
-    if  request.uri.path != "/ws" & $globals.sh1:
+    if request.uri.path != "/ws" & $globals.sh1:
         request.stream.close()
         warn "rejected websocket connection, password mismatch!"
         return
-        
+
     if not foundpeer:
         foundpeer = true
         lockpeerConnected:
@@ -41,14 +41,13 @@ proc handle(request: HttpRequest) {.async.} =
         {.cast(raises: []), gcsafe.}:
             if sw == nil:
                 sw = ws
-
             else:
                 sr = ws
-                    
                 var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
-                var ws_adapter = newWebsocketAdapter(socketr = sr,socketw = sw, store = publicStore)
+                var ws_adapter = newWebsocketAdapter(socketr = sr, socketw = sw, store = publicStore)
                 mux_adapter.chain(ws_adapter)
                 mux_adapter.signal(both, start)
+                sr = nil; sw = nil
 
 
 
@@ -59,19 +58,19 @@ proc handle(request: HttpRequest) {.async.} =
 
 proc startWebsocketServer(threadID: int) {.async.} =
     {.cast(gcsafe).}:
-        var socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr,ServerFlags.ReusePort}
+        var socketFlags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr, ServerFlags.ReusePort}
         if globals.keep_system_limit:
             socketFlags.excl ServerFlags.TcpNoDelay
 
-        
-        var server = 
-            # HttpServer.create(initTAddress("127.0.0.1:8888"), flags = socketFlags) 
+
+        var server =
+            # HttpServer.create(initTAddress("127.0.0.1:8888"), flags = socketFlags)
             TlsHttpServer.create(
-                address = initTAddress(globals.listen_addr,globals.cf_listen_port),
+                address = initTAddress(globals.listen_addr, globals.cf_listen_port),
                 tlsPrivateKey = TLSPrivateKey.init(globals.pkey),
                 tlsCertificate = TLSCertificate.init(globals.cert),
                 flags = socketFlags)
-       
+
 
         proc accepts() {.async, raises: [Defect].} =
             while true:
@@ -82,12 +81,12 @@ proc startWebsocketServer(threadID: int) {.async.} =
                     error "Https Accept error", name = e.name, msg = e.msg
 
         asyncCheck accepts()
-      
+
 
         trace "Started Ws Server", internalPort = globals.cf_listen_port
         await server.join()
 
-proc logs(){.async.}=
+proc logs(){.async.} =
     while true:
         echo "right"
         await sleepAsync(1000)

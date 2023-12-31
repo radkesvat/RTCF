@@ -21,7 +21,7 @@ const gc = "orc" # refc(thread local) | boehm
 
 const threads = true
 
-const enable_chronicles = true
+const enable_chronicles = false
 
 template outFile(dir, name: string): string = dir / name & (when defined(windows): ".exe" else: "")
 
@@ -182,7 +182,7 @@ template sharedBuildSwitches(){.dirty.} =
     # switch("define", "ssl")
     # switch("passC", "-I "&libs_dir&"/hwinfo/include/")
 
-    # switch("d",&"""chronicles_enabled={ (if enable_chronicles: "on" else: "off") }""")
+    switch("d",&"""chronicles_enabled={ (if enable_chronicles: "on" else: "off") }""")
     # switch("experimental", "views")
     switch("d", "textlines=textblocks[stdout]")
     # switch("d", "chronicles_line_numbers")

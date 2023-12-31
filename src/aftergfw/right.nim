@@ -29,7 +29,7 @@ proc connect():Future[WSSession] {.async.} =
                         path = "/ws" & $globals.sh1,
                         factories = [deflateFactory])
 
-            
+            return ws
         except [WebSocketError, HttpError]:
             var e = getCurrentException()
             error "Websocket error", name = e.name, msg = e.msg
@@ -47,7 +47,7 @@ proc startWebsocketConnector(threadID: int) {.async.} =
     mux_adapter.chain(ws_adapter)
     mux_adapter.signal(both, start)
 
-    await ws_w.stream.reader.join()
+  
 
 
 proc logs(){.async.}=
