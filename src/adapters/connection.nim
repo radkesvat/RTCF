@@ -23,7 +23,7 @@ type
         store: Store
 
 const
-    bufferSize = 8192
+    bufferSize = 4096
 
 
 proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.socket
