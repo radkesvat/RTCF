@@ -59,7 +59,7 @@ proc logs(){.async.}=
 proc run*(thread: int) {.async.} =
     await sleepAsync(200)
     #     info "Mode Kharej"
-    asyncCheck logs()
+    # asyncCheck logs()
 
     dynamicLogScope(thread):
         await startWebsocketConnector(thread)

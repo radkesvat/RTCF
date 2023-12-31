@@ -63,7 +63,7 @@ proc run*(thread: int) {.async.} =
     #     info "Mode Iran (Tcp + Udp)"
     # else:
     #     info "Mode Iran"
-    discard logs()
+    # discard logs()
     dynamicLogScope(thread):
         await startTcpListener(thread)
 

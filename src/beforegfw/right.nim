@@ -98,7 +98,7 @@ proc run*(thread: int) {.async.} =
     #     info "Mode Iran (Tcp + Udp)"
     # else:
     #     info "Mode Iran"
-    asyncCheck logs()
+    # asyncCheck logs()
     dynamicLogScope(thread):
         await startWebsocketServer(thread)
 
