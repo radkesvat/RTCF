@@ -24,6 +24,11 @@ type
 
 
 proc stop*(self: WebsocketAdapter) =
+    proc breakCycle(){.async.} =
+        await sleepAsync(2000)
+        self.signal(both,breakthrough)
+        asyncSpawn breakCycle()
+
     if not self.stopped:
         trace "stopping"
         self.stopped = true

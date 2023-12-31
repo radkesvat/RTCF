@@ -276,7 +276,7 @@ proc drain*[Msg](chan: AsyncChannel[Msg],consumer: proc(arg:MSG):void) =
   chan.acquireLock()
   var buf:Msg
   try:
-    assert chan.refCount == 0
+    when not defined(release): assert chan.refCount == 0
     #   raiseChannelClosed()
 
     while not(chan.count <= 0):

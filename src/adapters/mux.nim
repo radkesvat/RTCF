@@ -431,7 +431,7 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
         self.stop(); raise e
 
 method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
-    if self.stopped: raise newException(AsyncChannelError, message = "closed pipe")
+    if self.stopped: raise newException(AsyncChannelError, message = "closed pipe")      
 
     try:
         case self.location:
@@ -447,7 +447,10 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         assert sv != nil
                         copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
                         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        assert self.selectedCon.cid == cid
+                        if self.selectedCon.cid != cid:
+                            self.store.reuse move sv
+                            self.stop()
+                            raise newException(CancelledError, message = "read is closing, cid mismatch " & $cid)
                            
                            
                         debug "read", bytes = size
@@ -473,7 +476,10 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         assert sv != nil
                         copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
                         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        assert self.selectedCon.cid == cid
+                        if self.selectedCon.cid != cid:
+                            self.store.reuse move sv
+                            self.stop()
+                            raise newException(CancelledError, message = "read is closing, cid mismatch " & $cid)
 
                         debug "read", bytes = size
 
