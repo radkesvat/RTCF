@@ -36,6 +36,7 @@ type
         store: Store
         masterChannel: AsyncChannel[Cid]
         readChanFut: Future[StringView]
+        writeChanFut: Future[void]
 
 
 const
@@ -91,18 +92,19 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
         {.cast(raises: []), gcsafe.}:
             if self.readChanFut != nil and not self.readChanFut.finished():
                 await self.readChanFut.cancelAndWait()
-            
+            if self.writeChanFut != nil and not self.writeChanFut.finished():
+                await self.writeChanFut.cancelAndWait()
+
             schan.close()
-            schan.drain(proc(x:StringView) = (if x != nil: self.store.reuse x))
+            schan.drain(proc(x: StringView) = (if x != nil: self.store.reuse x))
 
             if sc:
-                # echo "close-out: ",cid
                 await fchan.send(closePacket(self, cid))
             await fchan.send(nil, true)
+            
+                        
 
     if not self.stopped:
-        # echo "stop:     ",self.selectedCon.cid
-
         trace "stopping"
         self.stopped = true
 
@@ -152,14 +154,13 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             if sv.isNil:
                 {.cast(raises: []), gcsafe.}:
                     var copy = globalTable[cid]
-                    # echo "destroy ! ", cid
                     safeAccess:
                         system.reset(globalTable[cid])
                     copy.first.close()
                     copy.first.close()
-                    copy.second.drain(proc(x:StringView) = (if x != nil: self.store.reuse x))
+                    copy.second.drain(proc(x: StringView) = (if x != nil: self.store.reuse x))
                     copy.second.close()
-                    
+
                 return
             else:
                 trace "Sending data from", cid = cid
@@ -246,7 +247,6 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 else:
                     sv.shiftl MuxHeaderLen; sv
 
-            # if(size == 0): echo "close-in:   ",cid
 
             if globalTableHas(cid):
                 try:
@@ -259,7 +259,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 except AsyncChannelError as e:
                     # channel is half closed ...
                     self.store.reuse move data
-                    warn "read loop was about to write data to a half closed chanenl!",msg=e.msg, cid = cid
+                    warn "read loop was about to write data to a half closed chanenl!", msg = e.msg, cid = cid
                     await sleepAsync(5)
                     continue
 
@@ -393,7 +393,7 @@ proc newMuxAdapetr*(name: string = "MuxAdapetr", master: AsyncChannel[Cid], stor
 
 method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     debug "Write", size = rp.len
-    if self.stopped: self.store.reuse rp; return
+    if self.stopped: self.store.reuse rp; raise newException(AsyncChannelError, message = "closed pipe")
 
     try:
         case self.location:
@@ -405,8 +405,8 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
                         rp.write(total_len)
                         rp.shiftl CidHeaderLen
                         rp.write(self.selectedCon.cid)
-                        await self.selectedCon.dcp.first.send(rp)
-
+                        self.writeChanFut = await self.selectedCon.dcp.first.send(rp)
+                        await self.writeChanFut
                     of Side.Right:
                         doAssert false, "this will not happen"
 
@@ -419,7 +419,9 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
                         rp.write(total_len)
                         rp.shiftl CidHeaderLen
                         rp.write(self.selectedCon.cid)
-                        await self.selectedCon.dcp.first.send(rp)
+                        self.writeChanFut = await self.selectedCon.dcp.first.send(rp)
+                        await self.writeChanFut
+
                     of Side.Right:
                         doAssert false, "this will not happen"
 
@@ -445,9 +447,9 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         assert sv != nil
                         copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
                         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        if not self.selectedCon.cid == cid:
-                            fatal "cid mismatch", readcid = cid, wanted = self.selectedCon.cid
-                            quit(1)
+                        assert self.selectedCon.cid == cid:
+                           
+                           
                         debug "read", bytes = size
 
                         if size.int < bytes:
@@ -471,9 +473,8 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         assert sv != nil
                         copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
                         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        if not self.selectedCon.cid == cid:
-                            fatal "cid mismatch", readcid = cid, wanted = self.selectedCon.cid
-                            quit(1)
+                        assert self.selectedCon.cid == cid:
+
                         debug "read", bytes = size
 
                         if size.int < bytes:

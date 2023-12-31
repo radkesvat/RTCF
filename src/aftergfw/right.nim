@@ -10,19 +10,23 @@ logScope:
     topic = "Kharej RightSide"
 
 
-const parallel_cons = 8
+const parallel_cons = 2
 
 proc connect():Future[WSSession] {.async.} =
     {.cast(gcsafe).}:
         try:
-            let deflateFactory = deflateFactory()
+            let foctories = case globals.compressor:
+            of deflate:
+                @[deflateFactory()]
+            else:
+                @[]
             let ws = when true:
                 await WebSocket.connect(
                     globals.cdn_domain & ":" & $globals.iran_port,
                     hostname = globals.cdn_domain,
                     path = "/ws" & $globals.sh1,
                     secure = true,
-                    factories = @[],
+                    factories = foctories,
                     flags = {})
                 else:
                     await WebSocket.connect(
@@ -46,7 +50,7 @@ proc standAloneChain(){.async.} =
     var ws_adapter = newWebsocketAdapter(socketr = ws_r,socketw = ws_w, store = publicStore)
     mux_adapter.chain(ws_adapter)
     mux_adapter.signal(both, start)
-
+    info "Connected to the target!"
 
 
 proc logs(){.async.}=

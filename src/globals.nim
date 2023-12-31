@@ -14,8 +14,12 @@ const version = "0.1"
 type RunMode*{.pure.} = enum
     unspecified, iran, kharej
 
+type CompressorOptions*{.pure.} = enum
+    nope,deflate,lz4
+
 var mode*: RunMode = RunMode.unspecified
 
+var compressor*: CompressorOptions = nope
 
 
 # [Connection]
@@ -324,6 +328,10 @@ proc init*() =
 
                     of "listen":
                         listen_addr = (p.val)
+
+                    of "compressor":
+                        compressor = parseInt(p.val).CompressorOptions
+
                     of "threads":
                         when hasThreadSupport:
                             threadsCount = parseInt(p.val).uint

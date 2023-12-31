@@ -29,8 +29,13 @@ proc handle(request: HttpRequest) {.async.} =
             peerConnected = true
 
     try:
-        let deflateFactory = deflateFactory()
-        let server = WSServer.new(factories = [])
+        let foctories = case globals.compressor:
+            of deflate:
+                @[deflateFactory()]
+            else:
+                @[]
+
+        let server = WSServer.new(factories = foctories)
         let ws = await server.handleRequest(request)
         if ws.readyState != Open:
             error "Failed to open websocket connection"
