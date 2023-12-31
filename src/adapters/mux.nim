@@ -292,9 +292,9 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     of sendclose:
                         if size > 0:
                             self.store.reuse move data
-                            trace "sending close for", cid = cid
-                            # echo "close-back:  ",cid
-                            await procCall write(Tunnel(self), closePacket(self, cid))
+                            # trace "sending close for", cid = cid
+                            # # echo "close-back:  ",cid
+                            # await procCall write(Tunnel(self), closePacket(self, cid))
                         else:
                             self.store.reuse move data
                     of nothing:
