@@ -51,10 +51,10 @@ template requires(self: Store, count: int) =
     if self.available.len < count:
         warn "Allocating again", wasleft = self.available.len, requested = count, increase_to = self.maxCap*2
         # doAssert false
-
+        var old_l = self.available.len
         self.available.setLen(self.maxCap*2)
 
-        for i in self.maxCap ..< self.maxCap*2:
+        for i in old_l ..< self.maxCap*2:
             self.available[i] = newStringView(cap = DefaultStrvCap)
 
         self.maxCap = self.maxCap*2
@@ -62,7 +62,8 @@ template requires(self: Store, count: int) =
 proc pop*(self: Store): Stringview =
     safe(self):
         self.requires 1
-        return self.available.pop()
+        result = self.available.pop()
+
 
 proc reuse*(self: Store, v: sink Stringview) =
     safe(self):
