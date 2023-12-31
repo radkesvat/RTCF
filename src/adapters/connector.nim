@@ -28,8 +28,9 @@ type
         isMultiPort: bool
         targetIp: IpAddress
         targetPort: Port
-        connectingFut: Future[void]
-        test:bool
+        connecting: bool
+        connectingFut: AsyncEvent
+        test: bool
 
 
 const
@@ -37,37 +38,6 @@ const
 
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
-
-proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
-    assert self.socket == nil
-    assert not self.test
-    self.test = true
-    var (tident, _) = self.findByType(TransportIdentTunnel, right)
-    doAssert tident != nil, "connector adapter could not locate TransportIdentTunnel! it is required"
-    self.protocol = if tident.isTcp: Tcp else: Udp
-
-    if self.isMultiPort:
-        var (port_tunnel, _) = self.findByType(PortTunnel, right)
-        doAssert port_tunnel != nil, "connector adapter could not locate PortTunnel! it is required"
-        self.targetPort = port_tunnel.getReadPort()
-
-    self.connectingFut = newFuture[void]()
-    if self.protocol == Tcp:
-        var target = initTAddress(self.targetIp, self.targetPort)
-        for i in 0 .. 4:
-            try:
-                var flags = {SocketFlags.TcpNoDelay, SocketFlags.ReuseAddr}
-                self.socket = await connect(target, flags = flags)
-                trace "connected to the target core"
-                self.connectingFut.complete()
-                return true
-            except CatchableError as e:
-                error "could not connect TCP to the core! ", name = e.name, msg = e.msg
-                if i != 4: notice "retrying ...", tries = i
-                else: error "give up connecting to core", tries = i; self.connectingFut = nil; return false
-    else:
-        quit(1)
-
 proc writeloop(self: ConnectorAdapter){.async.} =
     #read data from socket, write to chain
     var sv: StringView = nil
@@ -85,7 +55,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
                 trace "Writeloop read", bytes = actual
             sv.setLen(actual)
 
-        except [CancelledError, TransportError]:
+        except [CancelledError, TransportError, AsyncError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Read]", msg = e.name
             self.store.reuse sv
@@ -102,7 +72,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
 
             await procCall write(Tunnel(self), move sv)
 
-        except [CancelledError, FlowError]:
+        except [CancelledError, FlowError, AsyncError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Write]", msg = e.name
             if sv != nil: self.store.reuse sv
@@ -111,6 +81,40 @@ proc writeloop(self: ConnectorAdapter){.async.} =
         except CatchableError as e:
             error "Writeloop Unexpected Error, [Write]", name = e.name, msg = e.msg
             quit(1)
+
+
+proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
+    assert self.socket == nil
+    assert not self.test
+    self.test = true
+    var (tident, _) = self.findByType(TransportIdentTunnel, right)
+    doAssert tident != nil, "connector adapter could not locate TransportIdentTunnel! it is required"
+    self.protocol = if tident.isTcp: Tcp else: Udp
+
+    if self.isMultiPort:
+        var (port_tunnel, _) = self.findByType(PortTunnel, right)
+        doAssert port_tunnel != nil, "connector adapter could not locate PortTunnel! it is required"
+        self.targetPort = port_tunnel.getReadPort()
+    self.connecting = true
+    if self.protocol == Tcp:
+        var target = initTAddress(self.targetIp, self.targetPort)
+        for i in 0 .. 4:
+            try:
+                var flags = {SocketFlags.TcpNoDelay, SocketFlags.ReuseAddr}
+                self.socket = await connect(target, flags = flags)
+                trace "connected to the target core"
+                self.connectingFut.fire()
+                self.writeLoopFut = self.writeloop()
+                asyncSpawn self.writeLoopFut
+                return true
+            except CatchableError as e:
+                error "could not connect TCP to the core! ", name = e.name, msg = e.msg
+                if i != 4: notice "retrying ...", tries = i
+                else: error "give up connecting to core", tries = i; return false
+            finally:
+                self.connecting = false
+    else:
+        quit(1)
 
 
 
@@ -132,11 +136,9 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
 
         if not self.stopped and self.socket == nil:
-            if self.connectingFut != nil and not self.connectingFut.completed():
-                await self.connectingFut
-            elif await self.connect():
-                self.writeLoopFut = self.writeloop()
-                asyncSpawn self.writeLoopFut
+            if self.connecting:
+                await self.connectingFut.wait()
+            elif await connect(self):discard
             else:
                 self.store.reuse move sv
                 if not self.stopped: signal(self, both, close)
@@ -190,7 +192,7 @@ method start(self: ConnectorAdapter){.raises: [].} =
     {.cast(raises: []).}:
         procCall start(Adapter(self))
         trace "starting"
-
+        self.connectingFut = newAsyncEvent()
         self.readLoopFut = self.readloop()
         asyncSpawn self.readLoopFut
 

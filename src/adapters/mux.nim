@@ -35,7 +35,7 @@ type
         handles: seq[Future[void]]
         store: Store
         masterChannel: AsyncChannel[Cid]
-        readChanFut:Future[StringView]
+        readChanFut: Future[StringView]
 
 
 const
@@ -43,7 +43,7 @@ const
     CidHeaderLen = 2
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
-    ConnectionChanFixedSize = 3
+    ConnectionChanFixedSize = 1
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -78,47 +78,57 @@ proc globalTableHas(id: Cid): bool =
     safeAccess:
         return not (isNil(globalTable[id].first) or isNil(globalTable[id].second))
 
+proc closePacket(self: MuxAdapetr, cid: Cid): StringView =
+    var sv = self.store.pop()
+    sv.reserve(2)
+    sv.write(0.uint16); sv.shiftl sizeof Cid
+    sv.write(cid.Cid)
+    return sv
 
-proc stop*(self: MuxAdapetr) =
-    proc flush(schan: Chan, fchan: Chan, cid: Cid, store: Store){.async.} =
+proc stop*(self: MuxAdapetr, sendclose: bool = true) =
+    # proc flush(schan: Chan, fchan: Chan, cid: Cid, store: Store){.async.} =
+    #     {.cast(raises: []), gcsafe.}:
+    #         if self.readChanFut != nil and not self.readChanFut.finished():
+    #             await self.readChanFut.cancelAndWait()
+    #             echo "canceled!"
+    #         while true:
+    #             var d: StringView = nil
+
+    #             try: d = await schan.recv() except: discard
+    #             if d != nil: self.store.reuse d
+    #             else:
+    #                 while schan.dataleft() > 0:
+    #                     var d = schan.unsafeRecvSync()
+    #                     if d != nil: self.store.reuse d
+
+    #                 schan.unregister(); schan.close()
+    #                 fchan.unregister(); fchan.close()
+    #                 safeAccess:
+    #                     system.reset(globalTable[cid])
+    #                 return
+    proc doClose(fchan: Chan, schan: Chan, cid: Cid, store: Store, sc: bool){.async.} =
         {.cast(raises: []), gcsafe.}:
             if self.readChanFut != nil and not self.readChanFut.finished():
                 await self.readChanFut.cancelAndWait()
-                echo "canceled!"
-            while true:
-                var d:StringView = nil
-
-                try: d = await schan.recv() except:discard
-                if d != nil : self.store.reuse d
-                else:
-                    while schan.dataleft() > 0:
-                        var d = schan.unsafeRecvSync()
-                        if d != nil : self.store.reuse d
             
-                    schan.unregister();schan.close()
-                    fchan.unregister();fchan.close()
-                    safeAccess:
-                        system.reset(globalTable[cid])
-                    return
+            schan.close()
+            schan.drain(proc(x:StringView) = (if x != nil: self.store.reuse x))
 
+            if sc: await fchan.send(closePacket(self, cid))
+            await fchan.send(nil, true)
 
     if not self.stopped:
+        echo "stop called for ",self.selectedCon.cid
+
         trace "stopping"
         self.stopped = true
 
         if not self.selectedCon.dcp.isNil:
             {.cast(raises: []).}:
                 notice "sent close channel signal ", cid = self.selectedCon.cid
-                if self.location == BeforeGfw:                        
-                    asyncSpawn flush(self.selectedCon.dcp.second, self.selectedCon.dcp.first, self.selectedCon.cid, self.store)
-                    asyncSpawn self.selectedCon.dcp.first.send nil
-                    system.reset(self.selectedCon)
-                else:
-                    discard self.selectedCon.dcp.first.send(nil,true)
-                    self.selectedCon.dcp.first.unregister()
-                    self.selectedCon.dcp.second.unregister()
-                    system.reset(self.selectedCon)
-               
+                asyncSpawn doClose(self.selectedCon.dcp.first, self.selectedCon.dcp.second,
+                self.selectedCon.cid, self.store, sendclose)
+                system.reset(self.selectedCon)
 
 
 
@@ -127,12 +137,7 @@ proc stop*(self: MuxAdapetr) =
         self.handles.apply do(x: Future[void]): cancelSoon x
 
 
-proc closePacket(self: MuxAdapetr, cid: Cid): StringView =
-    var sv = self.store.pop()
-    sv.reserve(2)
-    sv.write(0.uint16); sv.shiftl sizeof Cid
-    sv.write(cid.Cid)
-    return sv
+
 
 proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.async.} =
     var first_data = firstdata_const
@@ -162,28 +167,17 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
 
         try:
             if sv.isNil:
-                trace "Sending close from", cid = cid
-                case self.location:
-                    of BeforeGfw:
-                        {.cast(raises: []), gcsafe.}: globalTable[cid].first.close()
-                        asyncCheck globalTable[cid].second.send(nil,true)
-                        {.cast(raises: []), gcsafe.}: globalTable[cid].second.close()
-                        globalTable[cid].first.unregister()
-                    of AfterGfw:
-                        {.cast(raises: []), gcsafe.}:
-                            globalTable[cid].first.close()
-                            while globalTable[cid].first.dataleft() > 0:
-                                self.store.reuse globalTable[cid].first.unsafeRecvSync()
-                            globalTable[cid].first.close()
+                {.cast(raises: []), gcsafe.}:
+                    var copy = globalTable[cid]
+                    safeAccess:
+                        system.reset(globalTable[cid])
+                    copy.first.close()
+                    copy.first.close()
+                    copy.second.drain(proc(x:StringView) = (if x != nil: self.store.reuse x))
 
-                            globalTable[cid].second.close()
-                            while globalTable[cid].second.dataleft() > 0:
-                                self.store.reuse globalTable[cid].second.unsafeRecvSync()
-                            globalTable[cid].second.close()
-                            
-                            safeAccess:
-                                system.reset(globalTable[cid])
-                await procCall write(Tunnel(self), closePacket(self, cid))
+
+                    copy.second.close()
+                    
 
                 return
             else:
@@ -275,12 +269,15 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             if globalTableHas(cid):
                 try:
                     assert data != nil
-                    await globalTable[cid].second.send data
+                    if(size == 0):
+                        await globalTable[cid].second.send(data)
+                    else:
+                        await globalTable[cid].second.send data
                     data = nil
-                except AsyncChannelError:
+                except AsyncChannelError as e:
                     # channel is half closed ...
                     self.store.reuse move data
-                    warn "read loop was about to write data to a half closed chanenl!", cid = cid
+                    warn "read loop was about to write data to a half closed chanenl!",msg=e.msg, cid = cid
                     await sleepAsync(5)
                     continue
 
@@ -293,10 +290,9 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         safeAccess:
                             globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
                             globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSize)
-                        globalTable[cid].first.open()
-                        globalTable[cid].second.open()
+                            globalTable[cid].first.open()
+                            globalTable[cid].second.open()
 
-                        self.masterChannel.sendSync cid
                         notice "data is written to created channel", cid = cid
 
                         var fut = self.handleCid(cid)
@@ -307,6 +303,8 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         asyncSpawn fut
 
                         await globalTable[cid].second.send move data
+                        echo "sending ", cid
+                        self.masterChannel.sendSync cid
 
                     of sendclose:
                         if size > 0:
@@ -329,7 +327,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
         quit(1)
     finally:
         if data != nil: self.store.reuse data
-    if not self.stopped: signal(self, both, close)
+        if not self.stopped: signal(self, both, close)
 
 
 
@@ -346,9 +344,6 @@ method init(self: MuxAdapetr, name: string, master: AsyncChannel[Cid], store: St
 method start(self: MuxAdapetr){.raises: [].} =
     {.cast(raises: []).}:
         procCall start(Adapter(self))
-
-
-
         trace "starting"
         case self.location:
             of BeforeGfw:
@@ -445,7 +440,7 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
 
     except CatchableError as e:
         self.store.reuse(rp)
-        self.stop; raise e
+        self.stop(); raise e
 
 method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     if self.stopped: raise newException(AsyncChannelError, message = "closed pipe")
@@ -459,7 +454,6 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                             raise newException(AsyncChannelError, message = "closed pipe")
                         var size: uint16 = 0
                         var cid: uint16 = 0
-                        echo "wana read!"
                         self.readChanFut = self.selectedCon.dcp.second.recv()
                         var sv = await self.readChanFut
                         assert sv != nil
@@ -473,6 +467,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         if size.int < bytes:
                             trace "closing read channel.", size
                             self.store.reuse move sv
+                            self.stop(false)
                             raise newException(CancelledError, message = "read close, size: " & $size)
 
                         return sv
@@ -498,6 +493,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
                         if size.int < bytes:
                             trace "closing read channel.", size
                             self.store.reuse move sv
+                            self.stop(false)
                             raise newException(CancelledError, message = "read close, size: " & $size)
 
                         return sv
@@ -509,8 +505,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
     except CatchableError as e:
         echo "didnt read"
-
-        self.stop; raise e
+        self.stop(); raise e
 
 
 method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains = default) {.raises: [].} =

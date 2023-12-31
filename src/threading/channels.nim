@@ -271,25 +271,21 @@ proc recvSync*[Msg](chan: AsyncChannel[Msg]): Msg =
     chan.releaseLock()
 
 
-proc unsafeRecvSync*[Msg](chan: AsyncChannel[Msg]): Msg =
+proc drain*[Msg](chan: AsyncChannel[Msg],consumer: proc(arg:MSG):void) =
   ## Blocking receive message ``Msg`` from channel ``chan``.
   chan.acquireLock()
+  var buf:Msg
   try:
-    # if chan.refCount == 0:
+    assert chan.refCount == 0
     #   raiseChannelClosed()
 
-    while chan.count <= 0:
-      chan.releaseLock()
-      let res = chan.eventNotEmpty.waitSync(InfiniteDuration).tryGet
-      chan.acquireLock()
-      if not res:
-        raiseChannelFailed()
+    while not(chan.count <= 0):
+      rawRecv(chan, addr buf, sizeof(Msg))
+      consumer(buf)
 
-    rawRecv(chan, addr result, sizeof(Msg))
-
+    chan.eventNotEmpty.unRegisterThread()
     if chan.maxItems > 0:
-      discard chan.eventNotFull.fireSync()
-
+      chan.eventNotFull.unRegisterThread()
   finally:
     chan.releaseLock()
 
