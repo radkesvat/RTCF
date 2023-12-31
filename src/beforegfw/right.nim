@@ -27,7 +27,7 @@ proc handle(request: HttpRequest) {.async.} =
 
     try:
         let deflateFactory = deflateFactory()
-        let server = WSServer.new(factories = [deflateFactory])
+        let server = WSServer.new(factories = [])
         let ws = await server.handleRequest(request)
         if ws.readyState != Open:
             error "Failed to open websocket connection"

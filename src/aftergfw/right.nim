@@ -21,7 +21,7 @@ proc connect() {.async.} =
                     hostname = globals.cdn_domain,
                     path = "/ws" & $globals.sh1,
                     secure = true,
-                    factories = @[deflateFactory],
+                    factories = @[],
                     flags = {})
                 else:
                     await WebSocket.connect(

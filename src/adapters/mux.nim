@@ -86,26 +86,6 @@ proc closePacket(self: MuxAdapetr, cid: Cid): StringView =
     return sv
 
 proc stop*(self: MuxAdapetr, sendclose: bool = true) =
-    # proc flush(schan: Chan, fchan: Chan, cid: Cid, store: Store){.async.} =
-    #     {.cast(raises: []), gcsafe.}:
-    #         if self.readChanFut != nil and not self.readChanFut.finished():
-    #             await self.readChanFut.cancelAndWait()
-    #             echo "canceled!"
-    #         while true:
-    #             var d: StringView = nil
-
-    #             try: d = await schan.recv() except: discard
-    #             if d != nil: self.store.reuse d
-    #             else:
-    #                 while schan.dataleft() > 0:
-    #                     var d = schan.unsafeRecvSync()
-    #                     if d != nil: self.store.reuse d
-
-    #                 schan.unregister(); schan.close()
-    #                 fchan.unregister(); fchan.close()
-    #                 safeAccess:
-    #                     system.reset(globalTable[cid])
-    #                 return
     proc doClose(fchan: Chan, schan: Chan, cid: Cid, store: Store, sc: bool){.async.} =
         {.cast(raises: []), gcsafe.}:
             if self.readChanFut != nil and not self.readChanFut.finished():
