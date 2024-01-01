@@ -58,10 +58,15 @@ cat /proc/cpuinfo
 
 اول باید برنامه رو دانلود کنید ؛ اگه سروری که روش نصب میکنید یک هسته داره با این دستور نصب کنید:
 
-> wget
+```sh
+wget  "https://raw.githubusercontent.com/radkesvat/RTCF/master/scripts/install_st.sh" -O install_st.sh && chmod +x install_st.sh && bash install_st.sh
+```
 
 و اگه چند هسته هست این دستور:
-> wget
+
+```sh
+wget  "https://raw.githubusercontent.com/radkesvat/RTCF/master/scripts/install_mt.sh" -O install_mt.sh && chmod +x install_mt.sh && bash install_mt.sh
+```
 
 فعلا چون نسخه بتا هست اینجوریه نصبش ؛‌ بعدا براش یه نصب کننده راحت مینویسم که سرویس هم بسازه ولی در حال حاضر خودتون باید اینکارا رو انجام بدید
 
