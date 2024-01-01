@@ -1,4 +1,4 @@
-import tunnel, strutils, stew/byteutils, threading/[channels], store
+import tunnel, strutils, threading/[channels], store
 import sequtils, websock/types, std/locks
 # This module unfortunately has global shared memory as part of its state
 
@@ -260,7 +260,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     # channel is half closed ...
                     self.store.reuse move data
                     warn "read loop was about to write data to a half closed chanenl!", msg = e.msg, cid = cid
-                    await sleepAsync(5)
+                    await sleepAsync(0.milliseconds)
                     continue
 
             else:
@@ -315,7 +315,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
 
 
 
-method init(self: MuxAdapetr, name: string, master: AsyncChannel[Cid], store: Store, loc: Location,
+proc init(self: MuxAdapetr, name: string, master: AsyncChannel[Cid], store: Store, loc: Location,
     cid: Cid) {.raises: [].} =
     self.location = loc
     self.store = store

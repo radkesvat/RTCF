@@ -1,6 +1,6 @@
 # a box of stringviews, you take when you need, then put it back
 # why tho? because we can elide reallocates = faster runtime = less memory used
-import stringview, sequtils, random, locks
+import stringview, random, locks
 logScope:
     topic = "Store"
 

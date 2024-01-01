@@ -1,4 +1,4 @@
-import std/[cpuinfo, locks, strutils, os, osproc]
+import std/[ os, osproc]
 import std/exitprocs
 import globals, chronos
 import system/ansi_c except SIGTERM
@@ -74,7 +74,7 @@ proc isPortFree(port: Port): bool =
     try:
         var address = initTAddress("::", port)
         var server = createStreamServer(address, proc(server: StreamServer,
-                               client: StreamTransport) {.async.} = discard
+                               client: StreamTransport) {.async: (raises: []).} = discard
             , flags = {ServerFlags.ReuseAddr})
 
         waitFor server.closeWait()

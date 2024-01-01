@@ -25,7 +25,7 @@ type
 
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
-        await sleepAsync(2000)
+        await sleepAsync(2.seconds)
         self.signal(both,breakthrough)
         asyncSpawn breakCycle()
 
@@ -46,7 +46,7 @@ proc keepAlive(self: WebsocketAdapter){.async.}=
             
 
 
-method init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSSession, store: Store) {.raises: [].} =
+proc init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSSession, store: Store) {.raises: [].} =
     self.socketr = socketr
     self.socketw = socketw
     self.store = store

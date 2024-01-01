@@ -71,7 +71,7 @@ method read*(self: PortTunnel, bytes: int, chain: Chains = default): Future[Stri
 proc start(self: PortTunnel) =
     {.cast(raises: []).}:
         trace "starting"
-        var (target, dir) = self.findByType(ConnectionAdapter, both, Chains.default)
+        var (target, _) = self.findByType(ConnectionAdapter, both, Chains.default)
         # doAssert target != nil, "Port Tunnel could not find connection adapter on default chain!"
         # echo "found dir was: ", $dir
         if target == nil:

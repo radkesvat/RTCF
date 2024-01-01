@@ -1,8 +1,7 @@
-import tunnel, strutils, store
-import sequtils, chronos/transports/stream
-import tunnels/transportident
-import tunnels/port
-# This module unfortunately has global shared memory as part of its state
+import tunnel,  store
+import chronos/transports/stream
+import tunnels/[transportident,port]
+
 
 logScope:
     topic = "Connector Adapter"
@@ -166,7 +165,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
 
 
-method init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpAddress, targetPort: Port, store: Store){.raises: [].} =
+proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpAddress, targetPort: Port, store: Store){.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
     self.store = store
     self.isMultiPort = isMultiPort
@@ -199,7 +198,7 @@ method start(self: ConnectorAdapter){.raises: [].} =
 
 proc stop*(self: ConnectorAdapter) =
     proc breakCycle(){.async.} =
-        await sleepAsync(2000)
+        await sleepAsync(2.seconds)
         self.signal(both, breakthrough)
 
     if not self.stopped:

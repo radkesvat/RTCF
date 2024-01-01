@@ -1,4 +1,3 @@
-import std/[cpuinfo, locks, strutils, os, osproc]
 import std/exitprocs
 import globals, chronos
 import system/ansi_c except SIGTERM

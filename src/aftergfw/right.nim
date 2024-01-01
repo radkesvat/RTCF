@@ -1,6 +1,5 @@
-import chronos, chronos/transports/[datagram, ipnet], chronos/osdefs
-import adapters/[ws, connection, mux, connector]
-import tunnel, tunnels/[port, tcp, udp, transportident]
+import chronos, chronos/transports/ipnet, chronos/osdefs
+import adapters/[ws, mux], tunnel
 import store, shared, httputils
 import websock/[websock, extensions/compression/deflate]
 
@@ -56,11 +55,11 @@ proc standAloneChain(){.async.} =
 proc logs(){.async.}=
     while true:
         echo "right"
-        await sleepAsync(1000)
+        await sleepAsync(1.seconds)
 
 
 proc run*(thread: int) {.async.} =
-    await sleepAsync(200)
+    await sleepAsync(200.milliseconds)
     #     info "Mode Kharej"
     # asyncSpawn logs()
 

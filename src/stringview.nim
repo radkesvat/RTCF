@@ -14,7 +14,7 @@
 #
 # made for orc gc in mind
 
-import stew/byteutils, math, ptrops, sequtils ,std/isolation
+import stew/byteutils, math, ptrops, std/isolation
 export ptrops, isolation
 
 const log_hooks {.booldefine.} = true

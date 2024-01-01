@@ -26,9 +26,8 @@ type
 
 const TransportIdentTunnelHeaderSize = sizeof TransportHeader
 
-from tunnels/tcp import TcpPacketFlag
+from tunnels/tcp import TcpPacketFlag,FakeUploadFlag
 from tunnels/udp import UdpPacketFlag
-from tunnels/tcp import FakeUploadFlag
 
 
 method init(self: TransportIdentTunnel, name: string){.base, raises: [], gcsafe.} =

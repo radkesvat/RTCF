@@ -1,18 +1,18 @@
-import chronos, chronos/transports/[datagram, ipnet], chronos/osdefs
-import adapters/[ws, connection, mux]
-import tunnel, tunnels/[port, tcp, udp, transportident]
-import store, shared
+import chronos, chronos/transports/ipnet, chronos/osdefs
+import adapters/[connection, mux]
+import tunnel, tunnels/[port, tcp]
+import  shared
 from globals import nil
 
 logScope:
     topic = "Iran LeftSide"
 
 
-proc startTcpListener(threadID: int) {.async.} =
+proc startTcpListener(threadID: int) {.async: (raises: []).} =
     {.cast(gcsafe).}:
         var foundpeer = false
         proc serveStreamClient(server: StreamServer,
-                        transp: StreamTransport) {.async.} =
+                        transp: StreamTransport){.async: (raises: []).}=
             try:
                 if not foundpeer:
                     lockpeerConnected:
@@ -35,7 +35,13 @@ proc startTcpListener(threadID: int) {.async.} =
                 error "handle client connection error", name = e.name, msg = e.msg
 
 
-        var address = initTAddress(globals.listen_addr, globals.listen_port.Port)
+        var address:TransportAddress
+        try:
+            address = initTAddress(globals.listen_addr, globals.listen_port.Port)
+        except CatchableError as e:
+                fatal "initTAddress failed", name = e.name, msg = e.msg
+                quit(1)
+
         let server: StreamServer =
             try:
                 var flags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr, ServerFlags.ReusePort}
@@ -46,19 +52,22 @@ proc startTcpListener(threadID: int) {.async.} =
                 fatal "StreamServer creation failed", name = e.name, msg = e.msg
                 quit(1)
 
-        server.start()
-        info "Started tcp server", listen = globals.listen_addr, port = globals.listen_port
-        await server.join()
-
+        try:
+            server.start()
+            info "Started tcp server", listen = globals.listen_addr, port = globals.listen_port
+            await server.join()
+        except CatchableError as e:
+            fatal "StreamServer start failed", name = e.name, msg = e.msg
+            quit(1)
 
 proc logs(){.async.} =
     while true:
         echo "left"
-        await sleepAsync(1000)
+        await sleepAsync(1.seconds)
 
 
 proc run*(thread: int) {.async.} =
-    await sleepAsync(200)
+    await sleepAsync(200.milliseconds)
     # if globals.accept_udp:
     #     info "Mode Iran (Tcp + Udp)"
     # else:

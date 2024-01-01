@@ -1,7 +1,7 @@
-import chronos, chronos/transports/[datagram, ipnet], chronos/osdefs
-import adapters/[ws, connection, mux, connector]
-import tunnel, tunnels/[port, tcp, udp, transportident]
-import store, shared, httputils
+import chronos, chronos/transports/ipnet, chronos/osdefs
+import adapters/[ws, mux]
+import tunnel
+import shared
 import websock/[websock, extensions/compression/deflate]
 
 from globals import nil
@@ -77,7 +77,7 @@ proc startWebsocketServer(threadID: int) {.async.} =
                 flags = socketFlags)
 
 
-        proc accepts() {.async, raises: [Defect].} =
+        proc accepts() {.async.} =
             while true:
                 try:
                     let req = await server.accept()
@@ -94,11 +94,11 @@ proc startWebsocketServer(threadID: int) {.async.} =
 proc logs(){.async.} =
     while true:
         echo "right"
-        await sleepAsync(1000)
+        await sleepAsync(1.seconds)
 
 
 proc run*(thread: int) {.async.} =
-    await sleepAsync(200)
+    await sleepAsync(200.milliseconds)
     # if globals.accept_udp:
     #     info "Mode Iran (Tcp + Udp)"
     # else:

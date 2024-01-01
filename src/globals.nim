@@ -1,7 +1,6 @@
 import chronos
 import dns_resolve, hashes, pretty, parseopt, strutils, random, net, osproc, strformat
-import chronos/apps/http/[httpclient], stew/byteutils, json, cpuinfo
-from os import sleep
+import chronos/apps/http/[httpclient], stew/byteutils, json, os
 import checksums/sha1
 
 
@@ -160,7 +159,7 @@ proc multiportSupported(): bool =
         return true
 
 when defined(linux) and not defined(android):
-    import std/[posix, os, osproc]
+    import std/posix
 
 proc increaseSystemMaxFd() =
     when defined(linux) and not defined(android):
@@ -409,12 +408,12 @@ proc init*() =
     try:
         self_ip = getPrimaryIPAddr(dest = parseIpAddress("8.8.8.8"))
     except CatchableError as e:
-        error "Could not resolve self ip using IPv4."
+        error "Could not resolve self ip using IPv4.", name = e.name, msg = e.msg
         info "retrying using v6 ..."
         try:
             self_ip = getPrimaryIPAddr(dest = parseIpAddress("2001:4860:4860::8888"))
         except CatchableError as e:
-            fatal "Could not resolve self ip using IPv6!"; quit(1)
+            fatal "Could not resolve self ip using IPv6!", name = e.name, msg = e.msg ; quit(1)
 
     info "Resolved", `self ip` = self_ip
 
@@ -440,7 +439,7 @@ proc init*() =
                                 break
                             except:
                                 notice "domain not registered yet!, plase wait..."
-                                await sleepAsync(250)
+                                await sleepAsync(250.milliseconds)
 
                 waitFor sync()
 
@@ -468,7 +467,7 @@ proc init*() =
 
                                 else:
                                     notice "domain not registered yet!, plase wait..."
-                                await sleepAsync(100)
+                                await sleepAsync(100.milliseconds)
                 waitFor sync()
 
             else: discard

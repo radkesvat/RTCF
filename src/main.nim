@@ -1,4 +1,3 @@
-
 import std/[random]
 from globals import nil
 import beforegfw,aftergfw
