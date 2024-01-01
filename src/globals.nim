@@ -15,7 +15,7 @@ type RunMode*{.pure.} = enum
     unspecified, iran, kharej
 
 type CompressorOptions*{.pure.} = enum
-    nope,deflate,lz4
+    nope, deflate, lz4
 
 var mode*: RunMode = RunMode.unspecified
 
@@ -180,7 +180,7 @@ proc increaseSystemMaxFd() =
                 echo "Please run as root. or start with --keep-os-limit "
                 quit(1)
 
-    else:discard
+    else: discard
 
 proc init*() =
     info "Application Version", version
@@ -330,7 +330,16 @@ proc init*() =
                         listen_addr = (p.val)
 
                     of "compressor":
-                        compressor = parseInt(p.val).CompressorOptions
+                        case $p.val:
+                            of "deflate":
+                                compressor = CompressorOptions.deflate
+                            of "lz4":
+                                fatal "LZ4 compressor not implemented yet."; quit(1)
+
+                            else:
+                                fatal "invalid value for option compressor.", value = $p.val; quit(1)
+
+
 
                     of "threads":
                         when hasThreadSupport:
