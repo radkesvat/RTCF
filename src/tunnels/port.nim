@@ -2,8 +2,7 @@ import tunnel
 import std/[endians]
 
 from adapters/connection import ConnectionAdapter, getRawSocket
-
-
+from chronos/osdefs import SocketHandle,SockLen,getsockopt
 
 logScope:
     topic = "Port Tunnel"
@@ -81,17 +80,21 @@ proc start(self: PortTunnel) =
             
         else:
             #Before GFW , when multi port = get port from socket ; else use writeport
+
             if self.multiport:
-                assert self.writePort == 0.Port
+                # assert self.writePort == 0.Port
                 var sock = target.getRawSocket()
                 var objbuf = newString(len = 28)
-                var size = int(if isV4Mapped(sock.remoteAddress): 16 else: 28)
+                var size = SockLen(if isV4Mapped(sock.remoteAddress): 16 else: 28)
                 let sol = int(if isV4Mapped(sock.remoteAddress): SOL_IP else: SOL_IPV6)
-                if not getSockOpt(sock.fd, sol, int(SO_ORIGINAL_DST), cast[var pointer](addr objbuf[0]), size):
+                # getSockOpt(sock.fd, sol, int(SO_ORIGINAL_DST), cast[var pointer](addr objbuf[0]), size) chronos mistakes ?
+                if -1 == osdefs.getsockopt(SocketHandle(sock.fd), cint(sol), cint(SO_ORIGINAL_DST),
+                              addr objbuf[0], addr(size)):
                     trace "multiport failure getting origin port. !"
                     raise newException(AssertionDefect, "multiport failure getting origin port. !")
 
                 bigEndian16(addr self.writePort, addr objbuf[2])
+
                 trace "Multiport ", port = self.writePort
         
 

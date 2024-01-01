@@ -19,7 +19,7 @@ proc startTcpListener(threadID: int) {.async.} =
                         foundpeer = peerConnected
                 if not foundpeer:
                     error "user connection but no foreign server connected yet!, closing..."
-                    transp.close();return
+                    transp.close(); return
 
                 let address = transp.remoteAddress()
                 trace "Got connection", form = address
@@ -41,7 +41,7 @@ proc startTcpListener(threadID: int) {.async.} =
                 var flags = {ServerFlags.TcpNoDelay, ServerFlags.ReuseAddr, ServerFlags.ReusePort}
                 if globals.keep_system_limit:
                     flags.excl ServerFlags.TcpNoDelay
-                createStreamServer(address, serveStreamClient, flags = flags)
+                createStreamServer(address, serveStreamClient, flags = flags, dualstack = Enabled)
             except CatchableError as e:
                 fatal "StreamServer creation failed", name = e.name, msg = e.msg
                 quit(1)
@@ -51,7 +51,7 @@ proc startTcpListener(threadID: int) {.async.} =
         await server.join()
 
 
-proc logs(){.async.}=
+proc logs(){.async.} =
     while true:
         echo "left"
         await sleepAsync(1000)

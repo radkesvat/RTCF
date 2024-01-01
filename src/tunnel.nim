@@ -157,16 +157,17 @@ proc findByName*(self: Tunnel, target: string or Hash, dir: SigDirection, chain:
             res
 
 method findByType*(self: Tunnel, target: typedesc, dir: SigDirection, chain: Chains = default): tuple[t: target, s: SigDirection]{.base, gcsafe.} =
+    if self of target: return (target(self), dir)
+    
     case dir:
         of left:
             if self.ties[chain].prev != nil:
-                if self.ties[chain].prev of target: return (target(self.ties[chain].prev), left)
-                else: self.ties[chain].prev.findByType(target, left, chain)
+                return  self.ties[chain].prev.findByType(target, left, chain)
             else: (nil, left)
         of right:
             if self.ties[chain].next != nil:
-                if self.ties[chain].next of target: return (target(self.ties[chain].next), right)
-                else: self.ties[chain].next.findByType(target, right, chain)
+                return  self.ties[chain].next.findByType(target, right, chain)
+
             else: (nil, right)
         of both:
             var res: tuple[t: target, s: SigDirection]
