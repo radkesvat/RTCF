@@ -76,7 +76,7 @@ printf  "\n"
 printf  "\n"
 
 
-echo "downloading ReverseTlsTunnel (SingleThreadVersion)"
+echo "downloading ReverseTlsTunnel (Multi Thread Version)"
 
 printf  "\n"
 
