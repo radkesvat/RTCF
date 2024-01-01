@@ -167,3 +167,4 @@ wget  "https://raw.githubusercontent.com/radkesvat/RTCF/master/scripts/install_m
 
 
 
+سایر قابلیت های Rtt در این تونل به زودی تکمیل و اضافه میشن در اپدیت های بعد
