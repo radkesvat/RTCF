@@ -83,14 +83,14 @@ configure_arguments() {
             case $server_choice in
                 "Iran (internal-server)")
                     read -p "Please Enter Password (Please choose the same password on both servers): " pass
-                    read -p "Please Enter Config Port (e.g., '8080' or for Multiport '23-65535') : " iran_local_port
+                    read -p "Please Enter Config (Local) Port . you can only use cloudflare HTTPS Ports or Multiport (e.g., '2087' or for Multiport '23-65535') : " iran_local_port
                     arguments="--auto:on --iran --lport:$iran_local_port --password:$pass"
                     break
                     ;;
                 "Kharej (external-server)")
-                    read -p "Please Enter IRAN IP(internal-server) : " iran_server_ip
+                    read -p "Please Enter IRAN IP(internal-server) : " iran_ip
                     read -p "Please Enter Config Port : " config_port
-                    read -p "Enter the [Port] of Internal server. you can only use these ports (443, 2053, 2083, 2087, 2096, 8443): " user_port
+                    read -p "Enter the [Port] of Internal server. you can only use cloudflare HTTPS Ports [443, 2053, 2083, 2087, 2096, 8443]: " user_port
                     case $user_port in
                         443|2053|2083|2087|2096|8443)
                             echo -e "${green}Valid port selected: $user_port${rest}"
@@ -120,10 +120,10 @@ configure_arguments() {
                                     continue
                                     ;;
                             esac
-                            arguments="--kharej --auto:on --iran-ip:$iran_server_ip --iran-port:$user_port --toip:127.0.0.1 --toport:$config_port --password:$pass$compressor"
+                            arguments="--kharej --auto:on --iran-ip:$iran_ip --iran-port:$user_port --toip:127.0.0.1 --toport:$config_port --password:$pass$compressor"
                             break
                         elif [ "$enable_compression" == "no" ]; then
-                            arguments="--kharej --auto:on --iran-ip:$iran_server_ip --iran-port:$user_port --toip:127.0.0.1 --toport:$config_port --password:$pass"
+                            arguments="--kharej --auto:on --iran-ip:$iran_ip --iran-port:$user_port --toip:127.0.0.1 --toport:$config_port --password:$pass"
                             break
                         else
                             echo -e "${red}Invalid choice. Please enter yes or no.${rest}"
