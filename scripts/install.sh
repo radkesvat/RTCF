@@ -275,7 +275,7 @@ update_services() {
 
             echo -e "${green}Service updated and restarted successfully.${rest}"
         else
-            echo -e "${cyan}You have the latest version ($installed_version).${rest}"
+            echo -e "${cyan}You Installed the latest version.[$installed_version]${rest}"
         fi
     else
         echo -e "${yellow}Please install RTCF first.${rest}"
