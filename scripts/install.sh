@@ -392,11 +392,11 @@ restart() {
 #Restart custom service
 restart_custom() {
     # Check if the service is installed
-    if sudo systemctl is-enabled --quiet rtcf.service; then
+    if sudo systemctl is-enabled --quiet custom_rtcf.service; then
         # Service is installed, start it
-        sudo systemctl restart rtcf.service > /dev/null 2>&1
+        sudo systemctl restart custom_rtcf.service > /dev/null 2>&1
 
-        if sudo systemctl is-active --quiet rtcf.service; then
+        if sudo systemctl is-active --quiet custom_rtcf.service; then
             echo "Tunnel service Restarted."
         else
             echo "Tunnel service failed to Restart."
