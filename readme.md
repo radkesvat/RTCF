@@ -59,6 +59,7 @@ cat /proc/cpuinfo
 ```
 bash <(curl -fsSL https://raw.githubusercontent.com/Ptechgithub/RTCF/main/scripts/install.sh)
 ```
+![17](https://github.com/Ptechgithub/configs/blob/main/media/17.jpg?raw=true)
 
 روش دوم:
 
