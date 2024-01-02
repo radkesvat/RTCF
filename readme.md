@@ -59,6 +59,9 @@ cat /proc/cpuinfo
 ```
 bash <(curl -fsSL https://raw.githubusercontent.com/Ptechgithub/RTCF/main/scripts/install.sh)
 ```
+
+روش دوم:
+
 اول باید برنامه رو دانلود کنید ؛ اگه سروری که روش نصب میکنید یک هسته داره با این دستور نصب کنید:
 
 ```sh
