@@ -51,6 +51,12 @@ detect_distribution() {
     fi
 }
 
+https_ports(){
+    echo -e "${green}-----------------------------------${rest}"
+    echo -e "${yellow}Cloudflare Https Port:${rest}"
+    echo -e "${yellow}[443, 2053, 2083, 2087, 2096, 8443]${rest}"
+}
+
 # check_dependencies
 check_dependencies() {
     detect_distribution
@@ -82,31 +88,41 @@ configure_arguments() {
         select server_choice in "${options[@]}"; do
             case $server_choice in
                 "Iran (internal-server)")
-                    read -p "Please Enter Password (Please choose the same password on both servers): " pass
-                    read -p "Please Enter Config (Local) Port . you can only use cloudflare HTTPS Ports or Multiport (e.g., '2087' or for Multiport '23-65535') : " iran_local_port
+                    https_ports
+                    echo -e "${green}-----------------------------------${rest}"
+                    read -p "Please Enter Config (Local) Port [ use cloudflare HTTPS Ports or Multiport (e.g., '2087' or for Multiport '23-65535')]: " iran_local_port
+                    echo -e "${green}-----------------------------------${rest}"
+                    read -p "Please Enter Password (Choose the same password on both servers): " pass
+                    echo -e "${green}-----------------------------------${rest}"
                     arguments="--auto:on --iran --lport:$iran_local_port --password:$pass"
                     break
                     ;;
                 "Kharej (external-server)")
-                    read -p "Please Enter IRAN IP(internal-server) : " iran_ip
-                    read -p "Please Enter Config Port : " config_port
-                    read -p "Enter the [Port] of Internal server. you can only use cloudflare HTTPS Ports [443, 2053, 2083, 2087, 2096, 8443]: " user_port
+                    echo -e "${green}-----------------------------------${rest}"
+                    read -p "Please Enter IRAN IP (internal-server): " iran_ip
+                    echo -e "${green}-----------------------------------${rest}"
+                    read -p "Please Enter Config [vpn] Port: " config_port
+                    https_ports
+                    echo ""
+                    read -p "Enter the [Port] of Internal server. Use cloudflare HTTPS Ports: " user_port
                     case $user_port in
                         443|2053|2083|2087|2096|8443)
                             echo -e "${green}Valid port selected: $user_port${rest}"
-                            ;;
+                            echo -e "${green}-----------------------------------${rest}"
+                             ;;
                         *)
                             echo -e "${red}Invalid port. Please select one of the specified ports.${rest}"
                             continue
                             ;;
                     esac
                     read -p "Please Enter Password (Please choose the same password on both servers): " pass
+                    echo -e "${green}-----------------------------------${rest}"
                     while true; do
-                        read -p "Do you want to enable compression? (yes/no) : " enable_compression
+                        read -p "Do you want to enable compression? (yes/no): " enable_compression
                         if [ "$enable_compression" == "yes" ]; then
-                            echo "Choose compressor algorithm:"
-                            echo "1) deflate"
-                            echo "2) lz4"
+                            echo -e "${green}Choose compressor algorithm:${rest}"
+                            echo -e "${purple}1) ${cyan}Deflate${rest}"
+                            echo -e "${purple}2) ${cyan}Lz4${rest}"
                             read -p "Enter your choice (1 or 2): " choice
                             case $choice in
                                 1)
