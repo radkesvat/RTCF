@@ -55,7 +55,10 @@ cat /proc/cpuinfo
 
 
 # نحوه استفاده
-
+روش اول : اسکریپت:
+```
+bash <(curl -fsSL https://raw.githubusercontent.com/Ptechgithub/RTCF/main/scripts/install.sh)
+```
 اول باید برنامه رو دانلود کنید ؛ اگه سروری که روش نصب میکنید یک هسته داره با این دستور نصب کنید:
 
 ```sh
