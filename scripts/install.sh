@@ -75,7 +75,7 @@ check_installed() {
 
 # Function to configure arguments based on user's choice
 configure_arguments() {
-    PS3="Which server do you want to use? "
+    PS3="Which server do you want to use? [1/2]"
     options=("Iran (internal-server)" "Kharej (external-server)")
 
     while true; do
