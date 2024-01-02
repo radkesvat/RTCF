@@ -378,7 +378,7 @@ echo -e "${yellow}******************************${rest}"
 check_tunnel_status
 check_c_tunnel_status
 echo -e "${yellow}******************************${rest}"
-echo -e " ${purple}-----#- RTCF Tunnel (Beta)-#-----${rest}"
+echo -e "${purple}-----#- RTCF Tunnel ${cyan}(Beta)${purple}-#-----${rest}"
 echo -e "${green}1) Install${rest}"
 echo -e "${red}2) Uninstall${rest}"
 echo -e "${yellow} ----------------------------${rest}"
