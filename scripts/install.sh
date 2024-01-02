@@ -94,7 +94,34 @@ configure_arguments() {
                     echo -e "${green}-----------------------------------${rest}"
                     read -p "Please Enter Password (Choose the same password on both servers): " pass
                     echo -e "${green}-----------------------------------${rest}"
-                    arguments="--auto:on --iran --lport:$iran_local_port --password:$pass"
+                    while true; do
+					    read -p "Do you want to enable compression? (yes/no): " enable_compression_iran
+					    if [ "$enable_compression_iran" == "yes" ]; then
+					        echo -e "${green}Choose compressor algorithm:${rest}"
+					        echo -e "${purple}1) ${cyan}Deflate${rest}"
+					        echo -e "${purple}2) ${cyan}Lz4${rest}"
+					        read -p "Enter your choice (1 or 2): " choice_iran
+					        case $choice_iran in
+					            1)
+					                compressor=" --compressor:deflate"
+					                ;;
+					            2)
+					                compressor=" --compressor:lz4"
+					                ;;
+					            *)
+					                echo -e "${red}Invalid choice. Please enter 1 or 2.${rest}"
+					                continue
+					                ;;
+					        esac
+					        arguments="--auto:on --iran --lport:$iran_local_port --password:$pass$compressor"
+					        break
+					    elif [ "$enable_compression_iran" == "no" ]; then
+					        arguments="--auto:on --iran --lport:$iran_local_port --password:$pass"
+					        break
+					    else
+					        echo -e "${red}Invalid choice. Please enter yes or no.${rest}"
+					    fi
+					done
                     break
                     ;;
                 "Kharej (external-server)")
