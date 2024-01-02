@@ -30,6 +30,30 @@ get_rtcf() {
     mv RTCF /usr/local/bin
 }
 
+get_rtcf() {
+  if [ -x "/usr/local/bin/RTCF" ]; then
+    latest_version=$(curl -s https://api.github.com/repos/radkesvat/RTCF/releases/latest | grep -o '"tag_name": "[^"]*"' | cut -d":" -f2 | sed 's/["V ]//g')
+    installed_version=$(/usr/local/bin/RTCF -V 2>&1 | awk '/version/{print $5}' | cut -d= -f2)
+    core_count=$(nproc --all)
+
+    if [ "$latest_version" != "$installed_version" ]; then
+      # Remove the old version
+      rm -f "/usr/local/bin/RTCF"
+
+      if [ $core_count -le 1 ]; then
+        wget "https://raw.githubusercontent.com/radkesvat/RTCF/master/scripts/install_st.sh" -O install_st.sh && chmod +x install_st.sh && bash install_st.sh && rm install_st.sh && sleep 1 && clear
+      else
+        wget "https://raw.githubusercontent.com/radkesvat/RTCF/master/scripts/install_mt.sh" -O install_mt.sh && chmod +x install_mt.sh && bash install_mt.sh && rm install_mt.sh && sleep 1 && clear
+      fi
+
+      mv RTCF /usr/local/bin
+      echo "RTCF installed successfully."
+    else
+      echo "RTCF is already up to date."
+    fi
+  fi
+}
+
 #detect_distribution
 detect_distribution() {
     # Detect the Linux distribution
