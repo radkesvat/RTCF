@@ -126,7 +126,7 @@ configure_arguments() {
                     break
                     ;;
                 "Kharej (external-server)")
-                    echo -e "${yellow}Please install on [Internal-server] first. If you have installed it, press Enter to continue...${rest}"
+                    echo -e "${yellow}Please install on [Internal-server] first. If you have installed it, ${green}press Enter to continue...${rest}"
                     read -r
                     echo -e "${green}-----------------------------------${rest}"
                     read -p "Please Enter IRAN IP (internal-server): " iran_ip
