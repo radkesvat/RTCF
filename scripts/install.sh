@@ -380,12 +380,12 @@ restart() {
         sudo systemctl restart rtcf.service > /dev/null 2>&1
 
         if sudo systemctl is-active --quiet rtcf.service; then
-            echo "Tunnel service Restarted."
+            echo -e "${green}The service has been successfully restarted.${rest}"
         else
-            echo "Tunnel service failed to Restart."
+            echo -e "${red}Tunnel service failed to Restart.${rest}"
         fi
     else
-        echo "Service is not installed."
+        echo -e "${yellow}Service is not installed.${rest}"
     fi
 }
 
@@ -397,12 +397,12 @@ restart_custom() {
         sudo systemctl restart custom_rtcf.service > /dev/null 2>&1
 
         if sudo systemctl is-active --quiet custom_rtcf.service; then
-            echo "Tunnel service Restarted."
+            echo -e "${green}The service has been successfully restarted.${rest}"
         else
-            echo "Tunnel service failed to Restart."
+            echo -e "${red}Tunnel service failed to Restart.${rest}"
         fi
     else
-        echo "Service is not installed."
+        echo -e "${yellow}Service is not installed.${rest}"
     fi
 }
 
