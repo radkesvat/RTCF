@@ -83,7 +83,7 @@ configure_arguments() {
             case $server_choice in
                 "Iran (internal-server)")
                     read -p "Please Enter Password (Please choose the same password on both servers): " pass
-                    read -p "Please Enter Config Port (e.g., '443' or for Multiport '23-65535') : " iran_local_port
+                    read -p "Please Enter Config Port (e.g., '8080' or for Multiport '23-65535') : " iran_local_port
                     arguments="--auto:on --iran --lport:$iran_local_port --password:$pass"
                     break
                     ;;
