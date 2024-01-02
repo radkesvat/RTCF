@@ -102,8 +102,6 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
                 await fchan.send(closePacket(self, cid))
             await fchan.send(nil, true)
 
-                        
-
     if not self.stopped:
         trace "stopping"
         self.stopped = true
@@ -111,11 +109,10 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
         if not self.selectedCon.dcp.isNil:
             {.cast(raises: []).}:
                 notice "sent close channel signal ", cid = self.selectedCon.cid
-                asyncSpawn doClose(self.selectedCon.dcp.first, self.selectedCon.dcp.second,
-                self.selectedCon.cid, self.store, sendclose)
+                var copy = self.selectedCon
                 system.reset(self.selectedCon)
-
-
+                asyncSpawn doClose(copy.dcp.first, copy.dcp.second,
+                copy.cid, self.store, sendclose)
 
         if not isNil(self.acceptConnectionFut): cancelSoon(self.acceptConnectionFut)
         if not isNil(self.readloopFut): cancelSoon(self.readloopFut)
@@ -126,9 +123,9 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
 proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.async.} =
     var first_data = firstdata_const
+
     while not self.stopped:
         var sv: StringView = nil
-
         try:
             if first_data.isNil:
                 sv = await globalTable[cid].first.recv()
@@ -149,22 +146,19 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             error "HandleCid Unexpeceted Error, [Read]", name = e.name, msg = e.msg
             quit(1)
 
-
         try:
             if sv.isNil:
                 {.cast(raises: []), gcsafe.}:
-                    var copy = globalTable[cid]
+                    var copy: DualChan
                     safeAccess:
+                        copy = globalTable[cid]
                         system.reset(globalTable[cid])
                     copy.first.close()
                     copy.first.close()
                     copy.second.drain(proc(x: StringView) = (if x != nil: self.store.reuse x))
                     copy.second.close()
-
-                return
             else:
                 trace "Sending data from", cid = cid
-
                 await procCall write(Tunnel(self), move sv)
 
         except [CancelledError, AsyncStreamError, TransportError, FlowError, WebSocketError]:
@@ -187,7 +181,7 @@ proc acceptcidloop(self: MuxAdapetr) {.async: (raw: true, raises: [CancelledErro
 
     proc register(cid: Cid, firstdata: StringView = nil) =
         assert(globalTableHas cid)
-        var fut = self.handleCid(cid)
+        var fut = self.handleCid(cid, firstdata)
         self.handles.add fut
         fut.callback = proc(udata: pointer) =
             let index = self.handles.find fut
@@ -203,7 +197,6 @@ proc acceptcidloop(self: MuxAdapetr) {.async: (raw: true, raises: [CancelledErro
     proc newRegisters(){.async.} =
         while not self.stopped:
             try:
-
                 let new_cid = await self.masterChannel.recv()
                 trace "acceptcidloop got a cid", cid = new_cid
                 register(new_cid, nil)
@@ -326,6 +319,19 @@ proc init(self: MuxAdapetr, name: string, master: AsyncChannel[Cid], store: Stor
 
 
 method start(self: MuxAdapetr){.raises: [].} =
+    proc newCid(): Cid =
+        while true:
+            let res = when hasThreadSupport:
+                    globalCounter.fetchAdd(1)
+                else:
+                    globalCounter
+            when not hasThreadSupport: inc globalCounter
+
+            if not globalTableHas(res):
+                return res
+
+
+
     {.cast(raises: []).}:
         procCall start(Adapter(self))
         trace "starting"
@@ -334,21 +340,13 @@ method start(self: MuxAdapetr){.raises: [].} =
                 case self.side:
                     of Side.Left:
                         # left mode, we create and send our cid signal
-
-                        let cid = when hasThreadSupport:
-                            globalCounter.fetchAdd(1)
-                            else:
-                                globalCounter
-
-                        when not hasThreadSupport: inc globalCounter
+                        let cid = newCid()
 
                         safeAccess:
                             globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeW)
                             globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeR)
                             globalTable[cid].first.open()
                             globalTable[cid].second.open()
-
-                        # echo "make:      ",cid
 
                         self.selectedCon = (cid, addr globalTable[cid])
                         self.masterChannel.sendSync cid
@@ -367,12 +365,8 @@ method start(self: MuxAdapetr){.raises: [].} =
                     of Side.Left:
                         # left mode, we have been created by right Mux
                         # we find our channels,write and read to it
-
                         doAssert(globalTableHas self.selectedCon.cid)
                         self.selectedCon.dcp = addr globalTable[self.selectedCon.cid]
-
-
-
 
                     of Side.Right:
                         # right side, we create cid signals
@@ -392,108 +386,79 @@ proc newMuxAdapetr*(name: string = "MuxAdapetr", master: AsyncChannel[Cid], stor
 
 
 method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future[void] {.async.} =
-    debug "Write", size = rp.len
     if self.stopped: self.store.reuse rp; raise newException(AsyncChannelError, message = "closed pipe")
+    debug "Write", size = rp.len
 
-    try:
+
+    when not defined(release):
         case self.location:
             of BeforeGfw:
                 case self.side:
-                    of Side.Left:
-                        var total_len = rp.len.uint16
-                        rp.shiftl SizeHeaderLen
-                        rp.write(total_len)
-                        rp.shiftl CidHeaderLen
-                        rp.write(self.selectedCon.cid)
-                        self.writeChanFut =  self.selectedCon.dcp.first.send(rp)
-                        await self.writeChanFut
+                    of Side.Left: discard
                     of Side.Right:
-                        doAssert false, "this will not happen"
-
-
+                        doAssert false, "this must not happen"
             of AfterGfw:
                 case self.side:
-                    of Side.Left:
-                        var total_len = rp.len.uint16
-                        rp.shiftl SizeHeaderLen
-                        rp.write(total_len)
-                        rp.shiftl CidHeaderLen
-                        rp.write(self.selectedCon.cid)
-                        self.writeChanFut =  self.selectedCon.dcp.first.send(rp)
-                        await self.writeChanFut
-
+                    of Side.Left: discard
                     of Side.Right:
-                        doAssert false, "this will not happen"
+                        doAssert false, "this must not happen"
+
+    try:
+        var total_len = rp.len.uint16
+        rp.shiftl SizeHeaderLen
+        rp.write(total_len)
+        rp.shiftl CidHeaderLen
+        rp.write(self.selectedCon.cid)
+        self.writeChanFut = self.selectedCon.dcp.first.send(rp)
+        await self.writeChanFut
 
 
     except CatchableError as e:
         self.store.reuse(rp)
         self.stop(); raise e
 
-method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
-    if self.stopped: raise newException(AsyncChannelError, message = "closed pipe")      
 
-    try:
+method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
+    if self.stopped: raise newException(AsyncChannelError, message = "closed pipe")
+
+    when not defined(release):
         case self.location:
             of BeforeGfw:
                 case self.side:
-                    of Side.Left:
-                        if self.selectedCon.dcp.isNil:
-                            raise newException(AsyncChannelError, message = "closed pipe")
-                        var size: uint16 = 0
-                        var cid: uint16 = 0
-                        self.readChanFut = self.selectedCon.dcp.second.recv()
-                        var sv = await self.readChanFut
-                        assert sv != nil
-                        copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
-                        copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        if self.selectedCon.cid != cid:
-                            self.store.reuse move sv
-                            self.stop()
-                            raise newException(CancelledError, message = "read is closing, cid mismatch " & $cid)
-                           
-                           
-                        debug "read", bytes = size
+                    of Side.Left: discard
 
-                        if size.int < bytes:
-                            trace "closing read channel.", size
-                            self.store.reuse move sv
-                            self.stop(false)
-                            raise newException(CancelledError, message = "read close, size: " & $size)
-
-                        return sv
                     of Side.Right:
-                        doAssert false, "this will not happen"
+                        doAssert false, "this must not happen"
             of AfterGfw:
                 case self.side:
-                    of Side.Left:
-                        if self.selectedCon.dcp.isNil:
-                            raise newException(AsyncChannelError, message = "closed pipe")
-                        var size: uint16 = 0
-                        var cid: uint16 = 0
-                        self.readChanFut = self.selectedCon.dcp.second.recv()
-                        var sv = await self.readChanFut
-                        assert sv != nil
-                        copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
-                        copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-                        if self.selectedCon.cid != cid:
-                            self.store.reuse move sv
-                            self.stop()
-                            raise newException(CancelledError, message = "read is closing, cid mismatch " & $cid)
-
-                        debug "read", bytes = size
-
-                        if size.int < bytes:
-                            trace "closing read channel.", size
-                            self.store.reuse move sv
-                            self.stop(false)
-                            raise newException(CancelledError, message = "read close, size: " & $size)
-
-                        return sv
+                    of Side.Left: discard
 
                     of Side.Right:
-                        doAssert false, "this will not happen"
+                        doAssert false, "this must not happen"
+    try:
 
+        if self.selectedCon.dcp.isNil:
+            raise newException(AsyncChannelError, message = "closed pipe")
+        var size: uint16 = 0
+        var cid: uint16 = 0
+        self.readChanFut = self.selectedCon.dcp.second.recv()
+        var sv = await self.readChanFut
+        assert sv != nil
+        copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
+        copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
+
+        if self.selectedCon.cid != cid:
+            fatal "cid mismatch!", c1 = self.selectedCon.cid, c2 = cid; quit(1)
+
+        debug "read", bytes = size
+
+        if size.int < bytes:
+            trace "closing read channel.", size
+            self.store.reuse move sv
+            self.stop(false)
+            raise newException(CancelledError, message = "read close, size: " & $size)
+
+        return sv
 
 
     except CatchableError as e:
