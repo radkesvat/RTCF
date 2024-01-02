@@ -125,6 +125,8 @@ configure_arguments() {
                     break
                     ;;
                 "Kharej (external-server)")
+                    echo -e "${yellow}Please install on [Internal-client] first. If you have installed it, press Enter to continue...${rest}"
+                    read -r
                     echo -e "${green}-----------------------------------${rest}"
                     read -p "Please Enter IRAN IP (internal-server): " iran_ip
                     echo -e "${green}-----------------------------------${rest}"
@@ -338,7 +340,7 @@ EOL
 }
 
 # uninstall_custom
-custom_uninstall() {
+uninstall_custom() {
     # Check if the service is installed
     if [ ! -f "/etc/systemd/system/custom_rtcf.service" ]; then
         echo "The Custom Tunnel is not installed."
@@ -369,6 +371,40 @@ display_version() {
   fi
 }
 
+#Restart service
+restart() {
+    # Check if the service is installed
+    if sudo systemctl is-enabled --quiet rtcf.service; then
+        # Service is installed, start it
+        sudo systemctl restart rtcf.service > /dev/null 2>&1
+
+        if sudo systemctl is-active --quiet rtcf.service; then
+            echo "Tunnel service Restarted."
+        else
+            echo "Tunnel service failed to Restart."
+        fi
+    else
+        echo "Service is not installed."
+    fi
+}
+
+#Restart custom service
+restart_custom() {
+    # Check if the service is installed
+    if sudo systemctl is-enabled --quiet rtcf.service; then
+        # Service is installed, start it
+        sudo systemctl restart rtcf.service > /dev/null 2>&1
+
+        if sudo systemctl is-active --quiet rtcf.service; then
+            echo "Tunnel service Restarted."
+        else
+            echo "Tunnel service failed to Restart."
+        fi
+    else
+        echo "Service is not installed."
+    fi
+}
+
 
 # Main menu
 clear
@@ -380,12 +416,14 @@ check_c_tunnel_status
 echo -e "${yellow}******************************${rest}"
 echo -e "${purple}-----#- RTCF Tunnel ${cyan}(Beta)${purple}-#-----${rest}"
 echo -e "${green}1) Install${rest}"
-echo -e "${red}2) Uninstall${rest}"
+echo -e "${green}2) Restart${rest}"
+echo -e "${red}3) Uninstall${rest}"
 echo -e "${yellow} ----------------------------${rest}"
-echo -e "${green}3) Install Custom${rest}"
-echo -e "${red}4) Uninstall Custom${rest}"
+echo -e "${green}4) Install Custom${rest}"
+echo -e "${green}5) Restart Custom${rest}"
+echo -e "${red}6) Uninstall Custom${rest}"
 echo -e "${yellow} ----------------------------${rest}"
-echo -e "${cyan}5) Update RTCF${rest}"
+echo -e "${cyan}7) Update RTCF${rest}"
 echo -e "${red}0) Exit${rest}"
 display_version
 read -p "Please choose: " choice
@@ -395,15 +433,21 @@ case $choice in
         install
         ;;
     2)
-        uninstall
+        restart
         ;;
     3)
-        install_custom
+        uninstall
         ;;
     4)
-        custom_uninstall
+        install_custom
         ;;
     5)
+        restart_custom
+        ;;
+    6)
+        uninstall_custom
+        ;;
+    7)
         update_services
         ;;
     0)   
