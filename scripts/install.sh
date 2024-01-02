@@ -51,6 +51,7 @@ detect_distribution() {
     fi
 }
 
+#HTTPS Ports
 https_ports(){
     echo -e "${green}-----------------------------------${rest}"
     echo -e "${yellow}Cloudflare Https Port:${rest}"
@@ -244,10 +245,10 @@ update_services() {
     # Check if RTCF executable exists
     if [ -x "/usr/local/bin/RTCF" ]; then
         # Get the current installed version of RTCF
-        installed_version=$(/usr/local/bin/RTCF -v 2>&1 | grep -o '"[0-9.]*"')
+        installed_version=$(/usr/local/bin/RTCF -V 2>&1 | awk '/version/{print $5}' | cut -d= -f2)
 
         # Fetch the latest version from GitHub releases
-        latest_version=$(curl -s https://api.github.com/repos/radkesvat/RTCF/releases/latest | grep -o '"tag_name": "[^"]*"' | cut -d":" -f2 | sed 's/["V ]//g' | sed 's/^/"/;s/$/"/')
+        latest_version=$(curl -s https://api.github.com/repos/radkesvat/RTCF/releases/latest | grep -o '"tag_name": "[^"]*"' | cut -d":" -f2 | sed 's/["V ]//g')
 
         # Compare the installed version with the latest version
         if [[ "$latest_version" > "$installed_version" ]]; then
@@ -404,7 +405,6 @@ restart_custom() {
         echo "Service is not installed."
     fi
 }
-
 
 # Main menu
 clear
