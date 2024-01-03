@@ -77,7 +77,7 @@
 
 و در سرور ایران هم این تغییر رو انجام میدیم:
 ```sh
-./RTCF  --iran --auto:off --cert:/root/mycert.cert --pkey:/root/mykey.key ...
+./RTCF  --iran --auto:off --cert:/root/mycert.cert --pkey:/root/mykey.key  --domain:cdn.mydomain.ir ...
 ```
 
 
