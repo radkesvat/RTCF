@@ -449,7 +449,11 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
 
         if self.selectedCon.cid != cid:
-            fatal "cid mismatch!", c1 = self.selectedCon.cid, c2 = cid; quit(1)
+            if self.selectedCon.cid == 0:
+                self.store.reuse sv
+                raise newException(AsyncChannelError, message = "closed pipe")
+
+            else: fatal "cid mismatch!", c1 = self.selectedCon.cid, c2 = cid; quit(1)
 
         debug "read", bytes = size
 

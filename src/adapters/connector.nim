@@ -33,7 +33,7 @@ type
 
 
 const
-    bufferSize = 4096
+    bufferSize = 4093
 
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
