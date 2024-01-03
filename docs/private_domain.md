@@ -7,7 +7,7 @@
 
 سپس اینجا داخل کلود دامنه رو وارد میکنیم
 
-![image](https://github.com/radkesvat/RTCF/assets/134321679/e474d638-df0f-4219-b03d-e0e14baf9bfc)
+![image](https://github.com/radkesvat/RTCF/assets/134321679/ce040628-7c9e-417b-889f-81ef2a49f7a4)
 
 
 سپس پلن رو میزنیم free
