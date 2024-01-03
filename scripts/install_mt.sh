@@ -98,4 +98,3 @@ rm RTCF_MT_AMD-0.1.zip
 
 echo "finished."
 
-printf  "\n"

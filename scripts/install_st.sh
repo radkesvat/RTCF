@@ -76,7 +76,7 @@ printf  "\n"
 printf  "\n"
 
 
-echo "downloading ReverseTlsTunnel (Single Thread Version)""
+echo "downloading ReverseTlsTunnel (Single Thread Version)"
 
 printf  "\n"
 
@@ -98,4 +98,5 @@ rm RTCF_ST_AMD-0.1.zip
 
 echo "finished."
 
-printf  "\n"
+
+
