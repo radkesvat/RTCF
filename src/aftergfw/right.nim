@@ -9,7 +9,7 @@ logScope:
     topic = "Kharej RightSide"
 
 
-const parallel_cons = 8
+const parallel_cons = 2
 
 proc connect(): Future[WSSession] {.async.} =
     {.cast(raises: []), gcsafe.}:
@@ -51,8 +51,12 @@ proc standAloneChain(){.async.} =
 
     try:
         var ws_r = await connect().wait(2.seconds)
-        var ws_w = await connect().wait(2.seconds)
-
+        var ws_w =
+            try:
+                await connect().wait(2.seconds)
+            except:
+                asyncSpawn ws_r.close()
+                raise
         var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
         var ws_adapter = newWebsocketAdapter(socketr = ws_r, socketw = ws_w, store = publicStore,
         onClose = proc() = asyncSpawn reconnect())
