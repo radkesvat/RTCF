@@ -7,7 +7,7 @@ import checksums/sha1
 logScope:
     topic = "Setup"
 
-const version = "0.2"
+const version = "0.3"
 
 
 type RunMode*{.pure.} = enum
@@ -294,7 +294,7 @@ proc init*() =
 
                     of "pkey":
                         try:
-                            cert = readFile(p.val)
+                            pkey = readFile(p.val)
                         except CatchableError as e:
                             fatal "could not read private-key file", error = e.name, msg = e.msg; quit(1)
                     of "auto":
