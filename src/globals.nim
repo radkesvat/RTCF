@@ -7,7 +7,7 @@ import checksums/sha1
 logScope:
     topic = "Setup"
 
-const version = "0.1"
+const version = "0.2"
 
 
 type RunMode*{.pure.} = enum
@@ -273,6 +273,11 @@ proc init*() =
 
                     of "domain":
                         cdn_domain = (p.val)
+                    of "self-ip":
+                        try:
+                            self_ip = parseIpAddress(p.val)
+                        except:
+                            fatal "could not parse self-ip", given = p.val; quit(1)
 
                     of "cdn-ip":
                         try:
@@ -405,17 +410,18 @@ proc init*() =
             quit(0)
         )
 
-    try:
-        self_ip = getPrimaryIPAddr(dest = parseIpAddress("8.8.8.8"))
-    except CatchableError as e:
-        error "Could not resolve self ip using IPv4.", name = e.name, msg = e.msg
-        info "retrying using v6 ..."
+    if self_ip == zeroDefault(typeof(self_ip)):
         try:
-            self_ip = getPrimaryIPAddr(dest = parseIpAddress("2001:4860:4860::8888"))
+            self_ip = getPrimaryIPAddr(dest = parseIpAddress("8.8.8.8"))
         except CatchableError as e:
-            fatal "Could not resolve self ip using IPv6!", name = e.name, msg = e.msg ; quit(1)
+            error "Could not resolve self ip using IPv4.", name = e.name, msg = e.msg
+            info "retrying using v6 ..."
+            try:
+                self_ip = getPrimaryIPAddr(dest = parseIpAddress("2001:4860:4860::8888"))
+            except CatchableError as e:
+                fatal "Could not resolve self ip using IPv6!", name = e.name, msg = e.msg ; quit(1)
 
-    info "Resolved", `self ip` = self_ip
+        info "Resolved", `self ip` = self_ip
 
     if not automode:
         if cdn_ip == zeroDefault(IpAddress):

@@ -26,7 +26,7 @@ proc startTcpListener(threadID: int) {.async: (raises: []).} =
                 block spawn:
                     var con_adapter = newConnectionAdapter(socket = transp, store = publicStore)
                     var port_tunnel = newPortTunnel(multiport = globals.multi_port, writeport = globals.listen_port)
-                    var tcp_tunnel = newTcpTunnel(store = publicStore, fakeupload_ratio = 0)
+                    var tcp_tunnel = newTcpTunnel(store = publicStore, fakeupload_ratio = globals.noise_ratio.int)
                     var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
                     con_adapter.chain(port_tunnel).chain(tcp_tunnel).chain(mux_adapter)
                     con_adapter.signal(both, start)

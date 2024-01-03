@@ -108,7 +108,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
         if not self.selectedCon.dcp.isNil:
             {.cast(raises: []).}:
-                notice "sent close channel signal ", cid = self.selectedCon.cid
+                trace "sent close channel signal ", cid = self.selectedCon.cid
                 var copy = self.selectedCon
                 system.reset(self.selectedCon)
                 asyncSpawn doClose(copy.dcp.first, copy.dcp.second,
@@ -134,10 +134,10 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 sv = first_data; first_data = nil
         except AsyncChannelError as e:
             #read from closed channel, close will be sent,
-            warn "HandleCid closed [Read]", msg = e.name, cid = cid
+            trace "HandleCid closed [Read]", msg = e.name, cid = cid
 
         except CancelledError as e:
-            warn "HandleCid Canceled [Read]", msg = e.name, cid = cid
+            trace "HandleCid Canceled [Read]", msg = e.name, cid = cid
             # quit(1)
             notice "saving ", cid = cid
             asyncSpawn muxSaveQueue.send (cid, nil)
@@ -157,6 +157,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                     copy.first.close()
                     copy.second.drain(proc(x: StringView) = (if x != nil: self.store.reuse x))
                     copy.second.close()
+                    return
             else:
                 trace "Sending data from", cid = cid
                 await procCall write(Tunnel(self), move sv)
@@ -263,14 +264,14 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
 
                     of create:
                         # echo "make:      ",cid
-                        notice "creating left channels", cid = cid
+                        trace "creating left channels", cid = cid
                         safeAccess:
                             globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeW)
                             globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeR)
                             globalTable[cid].first.open()
                             globalTable[cid].second.open()
 
-                        notice "data is written to created channel", cid = cid
+                        trace "data is written to created channel", cid = cid
 
                         var fut = self.handleCid(cid)
                         self.handles.add fut

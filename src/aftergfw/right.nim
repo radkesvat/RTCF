@@ -9,10 +9,10 @@ logScope:
     topic = "Kharej RightSide"
 
 
-const parallel_cons = 2
+const parallel_cons = 8
 
-proc connect():Future[WSSession] {.async.} =
-    {.cast(gcsafe).}:
+proc connect(): Future[WSSession] {.async.} =
+    {.cast(raises: []), gcsafe.}:
         try:
             let foctories = case globals.compressor:
             of deflate:
@@ -37,22 +37,36 @@ proc connect():Future[WSSession] {.async.} =
         except [WebSocketError, HttpError]:
             var e = getCurrentException()
             error "Websocket error", name = e.name, msg = e.msg
-            quit(1)
+            raise e
 
 
 proc standAloneChain(){.async.} =
     trace "Initiating connection"
-    var ws_r = await connect()
-    var ws_w = await connect()
-    
-    var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
-    var ws_adapter = newWebsocketAdapter(socketr = ws_r,socketw = ws_w, store = publicStore)
-    mux_adapter.chain(ws_adapter)
-    mux_adapter.signal(both, start)
-    info "Connected to the target!"
+
+    proc reconnect(){.async.} =
+        await sleepAsync(0)
+        info "Reconnecting in 3 secconds..."
+        await sleepAsync(3.seconds)
+        asyncSpawn standAloneChain()
+
+    try:
+        var ws_r = await connect().wait(2.seconds)
+        var ws_w = await connect().wait(2.seconds)
+
+        var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
+        var ws_adapter = newWebsocketAdapter(socketr = ws_r, socketw = ws_w, store = publicStore,
+        onClose = proc() = asyncSpawn reconnect())
+        mux_adapter.chain(ws_adapter)
+        mux_adapter.signal(both, start)
+        info "Connected to the target!"
+
+    except:
+        print getCurrentException()
+        asyncSpawn reconnect()
 
 
-proc logs(){.async.}=
+
+proc logs(){.async.} =
     while true:
         echo "right"
         await sleepAsync(1.seconds)
