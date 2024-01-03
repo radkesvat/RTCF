@@ -78,7 +78,9 @@ wget  "https://raw.githubusercontent.com/radkesvat/RTCF/master/scripts/install_m
 
 # سرور ایران
 
-> ./RTCF --auto:on --iran --lport:443 --password:123
+```sh
+./RTCF --auto:on --iran --lport:443 --password:123
+```
 
 
 
@@ -111,9 +113,9 @@ wget  "https://raw.githubusercontent.com/radkesvat/RTCF/master/scripts/install_m
 
 
 # سرور خارج
-
-> ./RTCF --kharej --auto:on --iran-ip:5.4.3.2 --iran-port:443 --toip:127.0.0.1 --toport:443 --password:123
-
+```sh
+./RTCF --kharej --auto:on --iran-ip:5.4.3.2 --iran-port:443 --toip:127.0.0.1 --toport:443 --password:123
+```
 
 --auto:on
 
