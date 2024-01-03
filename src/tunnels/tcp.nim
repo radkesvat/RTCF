@@ -55,10 +55,7 @@ method write*(self: TcpTunnel, data: StringView, chain: Chains = default): Futur
         fakepacket.setLen(data.len)
         copyMem(fakepacket.buf, self.store.getRandomBuf(1000), data.len)
         fakepacket.write(TcpPacketFlag and FakeUploadFlag)
-        try:
-            await procCall write(Tunnel(self),fakepacket)
-        finally:
-            self.store.reuse fakepacket
+        await procCall write(Tunnel(self),fakepacket)
 
 
 method read*(self: TcpTunnel, bytes: int, chain: Chains = default): Future[StringView] {.async.} =

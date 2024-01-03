@@ -49,7 +49,7 @@ proc handle(request: HttpRequest) {.async.} =
             else:
                 sr = ws
                 var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
-                var ws_adapter = newWebsocketAdapter(socketr = sr, socketw = sw, store = publicStore)
+                var ws_adapter = newWebsocketAdapter(socketr = sr, socketw = sw, store = publicStore,onClose = nil)
                 mux_adapter.chain(ws_adapter)
                 mux_adapter.signal(both, start)
                 sr = nil; sw = nil

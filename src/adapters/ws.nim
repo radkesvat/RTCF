@@ -15,18 +15,18 @@ logScope:
 
 
 type
+    CloseCb = proc(): void {.raises: [], gcsafe.}
     WebsocketAdapter* = ref object of Adapter
         socketw: WSSession
         socketr: WSSession
         store: Store
-
-
+        onClose: CloseCb
 
 
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
         await sleepAsync(2.seconds)
-        self.signal(both,breakthrough)
+        self.signal(both, breakthrough)
         asyncSpawn breakCycle()
 
     if not self.stopped:
@@ -34,29 +34,32 @@ proc stop*(self: WebsocketAdapter) =
         self.stopped = true
         asyncSpawn self.socketr.close()
         asyncSpawn self.socketw.close()
+        if not isNil(self.onClose): self.onClose()
 
-proc keepAlive(self: WebsocketAdapter){.async.}=
+proc keepAlive(self: WebsocketAdapter){.async.} =
     while not self.stopped:
         try:
-            await sleepAsync(30.seconds)
-            await self.socketw.ping(@[1.byte,2.byte,3.byte])
-        except :
+            await sleepAsync(10.seconds)
+            await self.socketw.ping(@[1.byte, 2.byte, 3.byte])
+        except:
             error "Failed to ping socket"
             self.stop()
-            
 
 
-proc init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSSession, store: Store) {.raises: [].} =
+
+proc init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSSession, store: Store, onClose: CloseCb) {.raises: [].} =
     self.socketr = socketr
     self.socketw = socketw
     self.store = store
+    self.onClose = onClose
     procCall init(Adapter(self), name, hsize = 0)
 
 
 
-proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession, socketw: WSSession, store: Store): WebsocketAdapter {.raises: [].} =
+proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession, socketw: WSSession, store: Store,
+        onClose: CloseCb): WebsocketAdapter {.raises: [].} =
     result = new WebsocketAdapter
-    result.init(name, socketr, socketw, store)
+    result.init(name, socketr, socketw, store, onClose)
     trace "Initialized", name
 
 
@@ -64,7 +67,6 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
     try:
         rp.bytes(byteseq):
             await self.socketw.send(byteseq, Binary)
-
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
         self.stop; raise e
@@ -99,7 +101,7 @@ proc start(self: WebsocketAdapter) =
     {.cast(raises: []).}:
         trace "starting"
         asyncSpawn keepAlive(self)
-        
+
 
 method signal*(self: WebsocketAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
     if sig == start: self.start()

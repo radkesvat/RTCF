@@ -318,7 +318,8 @@ proc shiftl*(v: StringView; bytes: int) =
 
 
 proc shiftr*(v: StringView; bytes: int) =
-    assert v[].curpos + bytes <= v[].lenpos # we can but dont want negative len !
+    when not defined(release):
+        assert v[].curpos + bytes <= v[].lenpos # we can but dont want negative len !
     if v.rCap < bytes:
         expand(v, (bytes - v.rCap))
     v[].curpos += bytes
