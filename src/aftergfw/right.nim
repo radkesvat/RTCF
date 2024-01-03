@@ -61,7 +61,7 @@ proc standAloneChain(){.async.} =
         info "Connected to the target!"
 
     except:
-        print getCurrentException()
+        # print getCurrentException()
         asyncSpawn reconnect()
 
 
