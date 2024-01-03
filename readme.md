@@ -73,9 +73,6 @@ wget  "https://raw.githubusercontent.com/radkesvat/RTCF/master/scripts/install_m
 
 
 
-
-دقت کنید احتمال کرش در نسخه مالتی ترد بیشتر هست ؛ نسخه مالتی ترد برای وقتی هست که خیلی کاربر دارید وگرنه هیچ اجباری به نصبش نیست حتی اگه سرورتون چند هسته ای هم هست ؛ میتونید سینگل نصب کنید
-
 # سرور ایران
 
 ```sh
@@ -166,8 +163,8 @@ wget  "https://raw.githubusercontent.com/radkesvat/RTCF/master/scripts/install_m
  پس برای اینکه این مشکل پیش نیاد شما باید دامنه شخصی داشته باشین ؛ بهترین دامنه .ir هست برای اینکار ولی دامنه های دیگه هم مشکلی نیست.
 
  
-آموزش استفاده از دامنه شخصی در این لینک
-
+[آموزش استفاده از دامنه شخصی در این لینک
+](https://github.com/radkesvat/RTCF/blob/main/docs/private_domain.md)
 
 
 
