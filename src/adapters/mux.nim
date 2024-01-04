@@ -172,11 +172,10 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
 
             # no need to reuse non-nil sv because write have to
-            if not sv.isNil:
-                if self.location == AfterGfw:
-                    discard globalTable[cid].second.send(closePacket(self, cid))
-                notice "saving ", cid = cid
-                asyncSpawn muxSaveQueue.send (cid, sv)
+            if self.location == AfterGfw:
+                discard globalTable[cid].second.send(closePacket(self, cid))
+            notice "saving ", cid = cid
+            asyncSpawn muxSaveQueue.send (cid, sv)
 
             if not self.stopped: signal(self, both, close)
             return
