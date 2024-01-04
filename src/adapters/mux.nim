@@ -32,7 +32,7 @@ type
         acceptConnectionFut: Future[void]
         readloopFut: Future[void]
         selectedCon: tuple[cid: Cid, dcp: DualChanPtr]
-        handles: seq[Future[void]]
+        handles: seq[tuple[c: Cid, f: Future[void]]]
         store: Store
         masterChannel: AsyncChannel[Cid]
         readChanFut: Future[StringView]
@@ -118,7 +118,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
         if not isNil(self.acceptConnectionFut): cancelSoon(self.acceptConnectionFut)
         if not isNil(self.readloopFut): cancelSoon(self.readloopFut)
-        self.handles.apply do(x: Future[void]): cancelSoon x
+        # self.handles.apply do(x:tuple[c: Cid, f: Future[void]]): cancelSoon x.f
 
 
 
@@ -126,7 +126,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.async.} =
     var first_data = firstdata_const
 
-    while not self.stopped:
+    while true:
         var sv: StringView = nil
         try:
             if first_data.isNil:
@@ -138,15 +138,6 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             #read from closed channel, close will be sent,
             trace "HandleCid closed [Read]", msg = e.name, cid = cid
 
-        except CancelledError as e:
-            trace "HandleCid Canceled [Read]", msg = e.name, cid = cid
-            if self.location == AfterGfw:
-                discard globalTable[cid].second.send(closePacket(self, cid))
-
-            notice "saving ", cid = cid
-            asyncSpawn muxSaveQueue.send (cid, sv)
-
-            return
         except CatchableError as e:
             error "HandleCid Unexpeceted Error, [Read]", name = e.name, msg = e.msg
             quit(1)
@@ -167,15 +158,9 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 trace "Sending data from", cid = cid
                 await procCall write(Tunnel(self), move sv)
 
-        except [CancelledError, AsyncStreamError, TransportError, FlowError, WebSocketError]:
+        except [AsyncStreamError, TransportError, FlowError, WebSocketError]:
             var e = getCurrentException()
             error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
-
-            # no need to reuse non-nil sv because write have to
-            if self.location == AfterGfw:
-                discard globalTable[cid].second.send(closePacket(self, cid))
-            notice "saving ", cid = cid
-            asyncSpawn muxSaveQueue.send (cid, sv)
 
             if not self.stopped: signal(self, both, close)
             return
@@ -191,9 +176,9 @@ proc acceptcidloop(self: MuxAdapetr) {.async: (raw: true, raises: [CancelledErro
     proc register(cid: Cid, firstdata: StringView = nil) =
         assert(globalTableHas cid)
         var fut = self.handleCid(cid, firstdata)
-        self.handles.add fut
+        self.handles.add (cid,fut)
         fut.callback = proc(udata: pointer) =
-            let index = self.handles.find fut
+            let index = self.handles.find (cid,fut)
             if index != -1: self.handles.del index
         asyncSpawn fut
 
@@ -279,10 +264,10 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         globalTable[cid].first.open()
                         globalTable[cid].second.open()
                     trace "data is written to created channel", cid = cid
-                    var fut = self.handleCid(cid)
-                    self.handles.add fut
+                    var fut = self.handleCid(cid, nil)
+                    self.handles.add (cid,fut)
                     fut.callback = proc(udata: pointer) =
-                        let index = self.handles.find fut
+                        let index = self.handles.find (cid,fut)
                         if index != -1: self.handles.del index
                     asyncSpawn fut
                     await globalTable[cid].second.send move data
