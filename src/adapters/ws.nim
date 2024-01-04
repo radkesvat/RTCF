@@ -39,8 +39,9 @@ proc stop*(self: WebsocketAdapter) =
 proc keepAlive(self: WebsocketAdapter){.async.} =
     while not self.stopped:
         try:
-            await sleepAsync(10.seconds)
+            await sleepAsync(15.seconds)
             await self.socketw.ping(@[1.byte, 2.byte, 3.byte])
+            await self.socketr.ping(@[1.byte, 2.byte, 3.byte])
         except:
             error "Failed to ping socket"
             self.stop()

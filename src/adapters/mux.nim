@@ -126,7 +126,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.async.} =
     var first_data = firstdata_const
 
-    while not self.stopped:
+    while true:
         var sv: StringView = nil
         try:
             if first_data.isNil:
@@ -144,7 +144,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 discard globalTable[cid].second.send(closePacket(self, cid))
 
             notice "saving ", cid = cid
-            asyncSpawn muxSaveQueue.send (cid, sv)
+            muxSaveQueue.sendSync (cid, sv)
 
             return
         except CatchableError as e:
@@ -175,7 +175,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             if self.location == AfterGfw:
                 discard globalTable[cid].second.send(closePacket(self, cid))
             notice "saving ", cid = cid
-            asyncSpawn muxSaveQueue.send (cid, sv)
+            muxSaveQueue.sendSync (cid, sv)
 
             if not self.stopped: signal(self, both, close)
             return
@@ -185,11 +185,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
 
 
 
-proc acceptcidloop(self: MuxAdapetr) {.async: (raw: true, raises: [CancelledError]).} =
-    var retFut = newFuture[void]()
-
-    proc register(cid: Cid, firstdata: StringView = nil) =
-        assert(globalTableHas cid)
+proc register(self: MuxAdapetr,cid: Cid, firstdata: StringView = nil) =
         var fut = self.handleCid(cid, firstdata)
         self.handles.add fut
         fut.callback = proc(udata: pointer) =
@@ -197,33 +193,26 @@ proc acceptcidloop(self: MuxAdapetr) {.async: (raw: true, raises: [CancelledErro
             if index != -1: self.handles.del index
         asyncSpawn fut
 
-    proc restoration(){.async.} =
-        while not self.stopped:
-            var (cid, data) = await muxSaveQueue.recv()
-            trace "acceptcidloop restored a cid", cid = cid
-            register(cid, data)
+proc restore(self: MuxAdapetr) =
+    while muxSaveQueue.dataLeft() > 0:
+        try:
+            var (cid, data) =  muxSaveQueue.recvSync()
+            notice "Restored", cid = cid
+            self.register(cid, data)
+        except:
+            var e = getCurrentException()
+            error "Restore error !", msg = e.name, msg = e.msg
 
-    proc newRegisters(){.async.} =
-        while not self.stopped:
-            try:
-                let new_cid = await self.masterChannel.recv()
-                trace "acceptcidloop got a cid", cid = new_cid
-                register(new_cid, nil)
-            except AsyncChannelError: # only means cancel !
-                error "acceptcidloop [newRegisters] got AsyncChannelError!"
-                if not self.stopped: signal(self, both, close)
+proc acceptcidloop(self: MuxAdapetr) {.async.} =
+    while not self.stopped:
+        try:
+            let new_cid = await self.masterChannel.recv()
+            trace "acceptcidloop got a cid", cid = new_cid
+            self.register(new_cid, nil)
+        except AsyncChannelError: # only means cancel !
+            error "acceptcidloop [newRegisters] got AsyncChannelError!"
+            if not self.stopped: signal(self, both, close)
 
-    var restore_fut = restoration()
-    var newregs_fut = newRegisters()
-
-    retFut.callback = proc(udata: pointer) =
-        trace "acceptcidloop finish"
-        retFut.complete()
-    retFut.cancelCallback = proc(udata: pointer) =
-        trace "acceptcidloop canceled"
-        restore_fut.cancelSoon()
-        newregs_fut.cancelSoon()
-    return retFut
 
 proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
     #read data from right adapetr, send it to the right chan
@@ -263,7 +252,6 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         # channel is half closed ...
                         self.store.reuse move data
                         warn "read loop was about to write data to a half closed chanenl!", msg = e.msg, cid = cid
-                        await sleepAsync(0.milliseconds)
                         continue
 
 
@@ -357,6 +345,7 @@ method start(self: MuxAdapetr){.raises: [].} =
                         self.masterChannel.sendSync cid
 
                     of Side.Right:
+                        self.restore()
                         # right side, we accept cid signals
                         self.acceptConnectionFut = acceptcidloop(self)
                         # we also need to read from right adapter
@@ -375,7 +364,7 @@ method start(self: MuxAdapetr){.raises: [].} =
 
                     of Side.Right:
                         # right side, we create cid signals
-                        # self.acceptConnectionFut = acceptcidloop(self)
+                        self.restore()
                         # we also need to read from right adapter
                         # examine and forward data to left channel
                         self.readloopFut = readloop(self, create)
