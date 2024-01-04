@@ -217,7 +217,7 @@ proc acceptcidloop(self: MuxAdapetr) {.async.} =
 proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
     #read data from right adapetr, send it to the right chan
     var data: StringView = nil
-    assert not self.stopped
+    # assert not self.stopped
     try:
         while not self.stopped:
             #reads exactly MuxHeaderLen size
