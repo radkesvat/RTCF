@@ -47,7 +47,7 @@ proc standAloneChain(){.async.} =
     trace "Initiating connection"
     {.cast(raises: []), gcsafe.}:
         try:
-            
+
             var ws_r = await connect().wait(3.seconds)
             var ws_w =
                 try:
@@ -66,7 +66,7 @@ proc standAloneChain(){.async.} =
             inc activeCons
 
         except:
-            print getCurrentException()
+            # print getCurrentException()
             {.cast(raises: []), gcsafe.}: disconnectEV.fire()
 
 
@@ -77,12 +77,16 @@ proc logs(){.async.} =
         await sleepAsync(1.seconds)
 
 
-proc reconnect(){.async.}=
+proc reconnect(){.async.} =
     {.cast(raises: []), gcsafe.}:
+        var gfs{.global.} = false
         while true:
             await disconnectEV.wait()
-            info "Reconnecting in 3 secconds..."
-            await sleepAsync(3.seconds)
+            if gfs:
+                info "Reconnecting in 3 secconds..."
+                await sleepAsync(3.seconds)
+            else:
+                gfs = true
             disconnectEV.clear()
             for i in activeCons..<parallelCons:
                 await standAloneChain()
@@ -98,6 +102,6 @@ proc run*(thread: int) {.async.} =
 
     dynamicLogScope(thread):
         {.cast(raises: []), gcsafe.}: disconnectEV.fire()
-            
+
 
 
