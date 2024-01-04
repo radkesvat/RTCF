@@ -340,7 +340,6 @@ install() {
     root_access
     check_installed
     check_dependencies
-    check_installed
     get_rtcf
     configure_arguments
 
@@ -468,9 +467,10 @@ check_c_tunnel_status() {
 #install_custom
 install_custom() {
     root_access
-    check_dependencies
     check_c_installed
+    check_dependencies
     get_rtcf
+    install_certs
     read -p "Enter RTCF arguments (Example: RTCF --auto:off --iran --lport:443 --password:123): " arguments
     
     # Create the custom_rtcf.service file with user input
