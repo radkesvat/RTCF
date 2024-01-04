@@ -238,34 +238,28 @@ configure_arguments() {
                     echo -e "${green}-----------------------------------${rest}"
                     read -p "Please Enter Password (Choose the same password on both servers): " pass
                     echo -e "${green}-----------------------------------${rest}"
-                    while true; do
-					    read -p "Do you want to enable compression? (yes/no): " enable_compression_iran
-					    if [ "$enable_compression_iran" == "yes" ]; then
-					        echo -e "${green}Choose compressor algorithm:${rest}"
-					        echo -e "${purple}1) ${cyan}Deflate${rest}"
-					        echo -e "${purple}2) ${cyan}Lz4 ${yellow}[Not ready] ${rest}"
-					        read -p "Enter your choice (1 or 2): " choice_iran
-					        case $choice_iran in
-					            1)
-					                compressor=" --compressor:deflate"
-					                ;;
-					            2)
-					                compressor=" --compressor:lz4"
-					                ;;
-					            *)
-					                echo -e "${red}Invalid choice. Please enter 1 or 2.${rest}"
-					                continue
-					                ;;
-					        esac
-					        arguments="--iran --auto:off --cert:$cert_path --pkey:$key_path --domain:$domain --lport:$iran_local_port --password:$pass$compressor"
-					        break
-					    elif [ "$enable_compression_iran" == "no" ]; then
-					        arguments="--iran --auto:off --cert:$cert_path --pkey:$key_path --domain:$domain --lport:$iran_local_port --password:$pass"
-					        break
-					    else
-					        echo -e "${red}Invalid choice. Please enter yes or no.${rest}"
-					    fi
-					done
+                    read -p "Do you want to enable compression? (yes/no): " enable_compression_iran
+                    if [ "$enable_compression_iran" == "yes" ]; then
+                        echo -e "${green}Choose compressor algorithm:${rest}"
+                        echo -e "${purple}1) ${cyan}Deflate${rest}"
+                        echo -e "${purple}2) ${cyan}Lz4 ${yellow}[Not ready] ${rest}"
+                        read -p "Enter your choice (1 or 2): " choice_iran
+                        case $choice_iran in
+                            1)
+                                compressor=" --compressor:deflate"
+                                ;;
+                            2)
+                                compressor=" --compressor:lz4"
+                                ;;
+                            *)
+                                echo -e "${red}Invalid choice. Please enter 1 or 2.${rest}"
+                                continue
+                                ;;
+                        esac
+                    else
+                        compressor=""
+                    fi
+                    arguments="--iran --auto:off --cert:$cert_path --pkey:$key_path --domain:$domain --lport:$iran_local_port --password:$pass$compressor"
                     break
                     ;;
                 "Kharej (external-server)")
@@ -285,7 +279,7 @@ configure_arguments() {
                         443|2053|2083|2087|2096|8443)
                             echo -e "${green}Valid port selected: $user_port${rest}"
                             echo -e "${green}-----------------------------------${rest}"
-                             ;;
+                            ;;
                         *)
                             echo -e "${red}Invalid port. Please select one of the specified ports.${rest}"
                             continue
@@ -293,35 +287,36 @@ configure_arguments() {
                     esac
                     read -p "Please Enter Password (Please choose the same password on both servers): " pass
                     echo -e "${green}-----------------------------------${rest}"
-                    while true; do
-                        read -p "Do you want to enable compression? (yes/no): " enable_compression
-                        if [ "$enable_compression" == "yes" ]; then
-                            echo -e "${green}Choose compressor algorithm:${rest}"
-                            echo -e "${purple}1) ${cyan}Deflate${rest}"
-                            echo -e "${purple}2) ${cyan}Lz4${rest}"
-                            read -p "Enter your choice (1 or 2): " choice
-                            case $choice in
-                                1)
-                                    compressor=" --compressor:deflate"
-                                    ;;
-                                2)
-                                    compressor=" --compressor:lz4"
-                                    ;;
-                                *)
-                                    echo -e "${red}Invalid choice. Please enter 1 or 2.${rest}"
-                                    continue
-                                    ;;
-                            esac
-                            arguments="--kharej --auto:off --domain:$domain --iran-ip:$iran_ip --iran-port:$user_port --toip:127.0.0.1 --toport:$config_port --password:$pass$compressor"
-                            break
-                        elif [ "$enable_compression" == "no" ]; then
-                            arguments="--kharej --auto:off --domain:$domain --iran-ip:$iran_ip --iran-port:$user_port --toip:127.0.0.1 --toport:$config_port --password:$pass"
-                            break
-                        else
-                            echo -e "${red}Invalid choice. Please enter yes or no.${rest}"
-                        fi
-                    done
-
+                    read -p "Do you want to enable compression? (yes/no): " enable_compression
+                    if [ "$enable_compression" == "yes" ]; then
+                        echo -e "${green}Choose compressor algorithm:${rest}"
+                        echo -e "${purple}1) ${cyan}Deflate${rest}"
+                        echo -e "${purple}2) ${cyan}Lz4${rest}"
+                        read -p "Enter your choice (1 or 2): " choice
+                        case $choice in
+                            1)
+                                compressor=" --compressor:deflate"
+                                ;;
+                            2)
+                                compressor=" --compressor:lz4"
+                                ;;
+                            *)
+                                echo -e "${red}Invalid choice. Please enter 1 or 2.${rest}"
+                                continue
+                                ;;
+                        esac
+                    else
+                        compressor=""
+                    fi
+                    arguments="--kharej --auto:off --domain:$domain --iran-ip:$iran_ip --iran-port:$user_port --toip:127.0.0.1 --toport:$config_port --password:$pass$compressor"
+                    echo -e "${green}-----------------------------------${rest}"
+                    read -p "Do you want to use a clean IP [cloudflare] ? (yes/no): " use_clean_ip
+                    if [ "$use_clean_ip" == "yes" ]; then
+                        echo -e "${green}-----------------------------------${rest}"
+                        read -p "Please enter the clean IP [cloudflare]: " clean_ip
+                        arguments+=" --cdn-ip:$clean_ip"
+                    fi
+                    
                     break
                     ;;
                 *) 
@@ -329,7 +324,7 @@ configure_arguments() {
                     ;;
             esac
         done
-
+       echo -e "${green}-----------------------------------${rest}"
         echo -e "${green}Configured arguments: ${cyan}RTCF $arguments${rest}"
         break
     done
