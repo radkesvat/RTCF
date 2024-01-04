@@ -141,11 +141,11 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
         except CancelledError as e:
             trace "HandleCid Canceled [Read]", msg = e.name, cid = cid
             if self.location == AfterGfw:
-                asyncSpawn globalTable[cid].second.send(closePacket(self, cid))
-            
+                discard globalTable[cid].second.send(closePacket(self, cid))
+
             notice "saving ", cid = cid
             asyncSpawn muxSaveQueue.send (cid, sv)
-           
+
             return
         except CatchableError as e:
             error "HandleCid Unexpeceted Error, [Read]", name = e.name, msg = e.msg
@@ -170,14 +170,14 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
         except [CancelledError, AsyncStreamError, TransportError, FlowError, WebSocketError]:
             var e = getCurrentException()
             error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
-            
+
             # no need to reuse non-nil sv because write have to
             if not sv.isNil:
                 if self.location == AfterGfw:
-                    asyncSpawn globalTable[cid].second.send(closePacket(self, cid))
+                    discard globalTable[cid].second.send(closePacket(self, cid))
                 notice "saving ", cid = cid
                 asyncSpawn muxSaveQueue.send (cid, sv)
-        
+
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
@@ -254,12 +254,12 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
 
 
             safeAccess:
-                if  not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
+                if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
                     try:
                         if not (globalTable[cid].second.trySend(data)):
                             self.store.reuse move data
-                            discard globalTable[cid].first.send(closePacket(self,cid))
-                        data = nil;continue
+                            discard globalTable[cid].first.send(closePacket(self, cid))
+                        data = nil; continue
                     except AsyncChannelError as e:
                         # channel is half closed ...
                         self.store.reuse move data
@@ -267,7 +267,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         await sleepAsync(0.milliseconds)
                         continue
 
-           
+
             if size == 0: self.store.reuse move data; continue # dont do anything
 
             case whenNotFound:
@@ -300,7 +300,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     self.store.reuse move data
 
 
-    except [CancelledError, AsyncChannelError,WSClosedError, FlowError, TransportError]:
+    except [CancelledError, AsyncChannelError, WSClosedError, FlowError, TransportError]:
         var e = getCurrentException()
         trace "Readloop canceled", name = e.name, msg = e.msg
     except AsyncStreamError as e:
