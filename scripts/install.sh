@@ -330,10 +330,19 @@ uninstall() {
     sudo systemctl stop rtcf.service
     sudo systemctl disable rtcf.service
 
+    # Get the domain from the ca.log file
+    if [ -f "/root/cf_certs/ca.log" ]; then
+        domain=$(cat /root/cf_certs/ca.log)
+    else
+        echo "Error: Unable to find the domain information."
+        return
+    fi
+
     # Remove service file
     sudo rm /etc/systemd/system/rtcf.service
     sudo systemctl reset-failed
     sudo rm /usr/local/bin/RTCF
+    sudo rm -rf "/root/.acme.sh/$domain"
 
     echo -e "${green}Uninstallation completed successfully.${rest}"
 }
