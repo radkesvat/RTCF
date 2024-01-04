@@ -80,12 +80,12 @@ proc reuse*(self: Store, v: sink Stringview) =
         v.reset()
         self.available.add(v)
 
-        if self.available.len > (self.maxCap) + DefaultStoreCap:
+        if self.available.len >= (self.maxCap*2) - 100:
             warn "Shrinking memory", wasleft = self.available.len, cap = self.maxCap
-            for i in 0..<(self.maxCap) - DefaultStoreCap:
+            for i in 0 ..< (self.maxCap - 100):
                 var x = self.available.pop()
                 x.destroy()
-            self.maxCap = DefaultStoreCap
+                dec 
             discard malloc_trim(0)
 
 proc getRandomBuf*(self: Store, variety: int = 50): pointer =
