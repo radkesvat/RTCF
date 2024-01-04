@@ -48,7 +48,7 @@ proc readloop(self: ConnectionAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
-            if sv.len != await socket.write(sv.buf, sv.len):
+            if sv.len != await socket.write(sv.buf, sv.len).wait(3000):
                 raise newAsyncStreamIncompleteError()
 
         except [CancelledError, FlowError, TransportError,AsyncChannelError, AsyncStreamError]:
