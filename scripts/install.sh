@@ -133,17 +133,17 @@ install_certs() {
                 else
                     bash ~/.acme.sh/acme.sh --issue -d ${domain} --standalone -k ec-256 --insecure
                 fi
-                bash ~/.acme.sh/acme.sh --install-cert -d ${domain} --key-file /root/cf_certs/private.key --fullchain-file /root/cf_certs/cert.crt --ecc
-                if [[ -f /root/cf_certs/cert.crt && -f /root/cf_certs/private.key ]] && [[ -s /root/cf_certs/cert.crt && -s /root/cf_certs/private.key ]]; then
+                bash ~/.acme.sh/acme.sh --install-cert -d ${domain} --key-file $key_path --fullchain-file $cert_path --ecc
+                if [[ -f $cert_path && -f $key_path ]] && [[ -s $cert_path && -s $key_path ]]; then
                     echo $domain > /root/cf_certs/ca.log
                     sed -i '/--cron/d' /etc/crontab >/dev/null 2>&1
                     echo "0 0 * * * root bash /root/.acme.sh/acme.sh --cron -f >/dev/null 2>&1" >> /etc/crontab
                     echo -e "${green}-----------------------------------${rest}"
                     echo -e "${green}Successful! The certificate (cer.crt) and private key (private.key) saved in /root/cf_certs${rest}"
-                    echo -e "${green}The certificate crt file path: /root/cf_certs/cert.crt${rest}"
-                    echo -e "${green}The private key file path: /root/cf_certs/private.key${rest}"
-                    chmod 755 /root/cf_certs/cert.crt
-                    chmod 755 /root/cf_certs/private.key
+                    echo -e "${green}The certificate crt file path: $cert_path${rest}"
+                    echo -e "${green}The private key file path: $key_path${rest}"
+                    chmod 755 $cert_path
+                    chmod 755 $key_path
                     chmod 755 /root/cf_certs/ca.log
                 fi
             else
