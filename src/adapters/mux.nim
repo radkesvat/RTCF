@@ -45,7 +45,7 @@ const
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
     ConnectionChanFixedSizeW = 1
-    ConnectionChanFixedSizeR = 1024
+    ConnectionChanFixedSizeR = 8192
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -182,7 +182,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                     copy.first.close()
                     copy.second.drain(proc(x: StringView) = (if x != nil: self.store.reuse x))
                     copy.second.close()
-                    
+
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
