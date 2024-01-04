@@ -140,9 +140,12 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
 
         except CancelledError as e:
             trace "HandleCid Canceled [Read]", msg = e.name, cid = cid
-            # quit(1)
+            if self.location == AfterGfw:
+                asyncSpawn globalTable[cid].second.send(closePacket(self, cid))
+            
             notice "saving ", cid = cid
-            asyncSpawn muxSaveQueue.send (cid, nil)
+            asyncSpawn muxSaveQueue.send (cid, sv)
+           
             return
         except CatchableError as e:
             error "HandleCid Unexpeceted Error, [Read]", name = e.name, msg = e.msg
