@@ -243,7 +243,7 @@ configure_arguments() {
 					    if [ "$enable_compression_iran" == "yes" ]; then
 					        echo -e "${green}Choose compressor algorithm:${rest}"
 					        echo -e "${purple}1) ${cyan}Deflate${rest}"
-					        echo -e "${purple}2) ${cyan}Lz4${rest}"
+					        echo -e "${purple}2) ${cyan}Lz4 ${yellow}[Not ready] ${rest}"
 					        read -p "Enter your choice (1 or 2): " choice_iran
 					        case $choice_iran in
 					            1)
