@@ -96,7 +96,7 @@ install_certs() {
     check_port
     cert_path="/root/cf_certs/cert.crt"
     key_path="/root/cf_certs/private.key"
-    [ ! -f "$cert_path" ] && mkdir -p /root/cf_certs && touch "$cert_path" "$key_path"
+    [ ! -f "$cert_path" ] && mkdir -p /root/cf_certs
 
     if [[ -s $cert_path && -s $key_path && -f /root/cf_certs/do.log ]]; then
         domain=$(cat /root/cf_certs/do.log)
