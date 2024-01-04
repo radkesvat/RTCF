@@ -388,8 +388,8 @@ uninstall() {
     sudo rm /etc/systemd/system/rtcf.service
     sudo systemctl reset-failed
     sudo rm /usr/local/bin/RTCF
-    sudo rm -rf "/root/.acme.sh/$domain" > /dev/null 2>&1
-    sudo rm -rf "/etc/letsencrypt/live/$domain" > /dev/null 2>&1
+    sudo rm -rf "/root/.acme.sh" > /dev/null 2>&1
+    sudo rm -rf "/etc/letsencrypt" > /dev/null 2>&1
     sudo rm -rf "/root/cf_certs" > /dev/null 2>&1
 
     echo -e "${green}Uninstallation completed successfully.${rest}"
