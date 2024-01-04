@@ -111,6 +111,7 @@ install_certs() {
             [[ -z $domain ]] && red "No domain name entered, unable to perform operation！" && exit 1
             echo -e "${green}Domain name entered: $domain${rest}" && sleep 1
             domainIP=$(dig +short "${domain}")
+            ID=$(lsb_release -si)
             ip=$(hostname -I | awk '{print $1}')
             if [[ $domainIP == $ip ]]; then
                 if [[ $ID == "CentOS" ]]; then
