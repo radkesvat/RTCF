@@ -9,7 +9,10 @@ logScope:
     topic = "Kharej RightSide"
 
 
-const parallel_cons = 2
+const parallelCons = 2
+
+var disconnectEV = newAsyncEvent()
+var activeCons = 0
 
 proc connect(): Future[WSSession] {.async.} =
     {.cast(raises: []), gcsafe.}:
@@ -42,31 +45,29 @@ proc connect(): Future[WSSession] {.async.} =
 
 proc standAloneChain(){.async.} =
     trace "Initiating connection"
+    {.cast(raises: []), gcsafe.}:
+        try:
 
-    proc reconnect(){.async.} =
-        await sleepAsync(0)
-        info "Reconnecting in 3 secconds..."
-        await sleepAsync(3.seconds)
-        asyncSpawn standAloneChain()
+            var ws_r = await connect().wait(3.seconds)
+            var ws_w =
+                try:
+                    await connect().wait(3.seconds)
+                except:
+                    asyncSpawn ws_r.close()
+                    raise
+            var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
+            var ws_adapter = newWebsocketAdapter(socketr = ws_r, socketw = ws_w, store = publicStore,
+            onClose = proc() =
+                {.cast(raises: []), gcsafe.}:
+                    dec activeCons; disconnectEV.fire())
+            mux_adapter.chain(ws_adapter)
+            mux_adapter.signal(both, start)
+            info "Connected to the target!"
+            inc activeCons
 
-    try:
-        var ws_r = await connect().wait(4.seconds)
-        var ws_w =
-            try:
-                await connect().wait(4.seconds)
-            except:
-                asyncSpawn ws_r.close()
-                raise
-        var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
-        var ws_adapter = newWebsocketAdapter(socketr = ws_r, socketw = ws_w, store = publicStore,
-        onClose = proc() = asyncSpawn reconnect())
-        mux_adapter.chain(ws_adapter)
-        mux_adapter.signal(both, start)
-        info "Connected to the target!"
-
-    except:
-        print getCurrentException()
-        asyncSpawn reconnect()
+        except:
+            # print getCurrentException()
+            {.cast(raises: []), gcsafe.}: disconnectEV.fire()
 
 
 
@@ -76,13 +77,31 @@ proc logs(){.async.} =
         await sleepAsync(1.seconds)
 
 
+proc reconnect(){.async.} =
+    {.cast(raises: []), gcsafe.}:
+        var gfs{.global.} = false
+        while true:
+            await disconnectEV.wait()
+            if gfs:
+                info "Reconnecting in 3 secconds..."
+                await sleepAsync(3.seconds)
+            else:
+                gfs = true
+            disconnectEV.clear()
+            for i in activeCons..<parallelCons:
+                await standAloneChain()
+
+
 proc run*(thread: int) {.async.} =
     await sleepAsync(200.milliseconds)
+    {.cast(raises: []), gcsafe.}: disconnectEV.clear()
+    asyncSpawn reconnect()
+    # asyncSpawn standAloneChain()
     #     info "Mode Kharej"
     # asyncSpawn logs()
 
     dynamicLogScope(thread):
-        for i in 0 ..< parallel_cons:
-            await standAloneChain()
+        {.cast(raises: []), gcsafe.}: disconnectEV.fire()
+
 
 

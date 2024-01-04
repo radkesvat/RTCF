@@ -42,7 +42,7 @@ proc handle(request: HttpRequest) {.async.} =
             return
 
         # trace "Websocket handshake completed"
-        trace "Got Websocket connection", form = address
+        info "Got Websocket connection !"
         {.cast(raises: []), gcsafe.}:
             if sw == nil:
                 sw = ws
@@ -88,7 +88,7 @@ proc startWebsocketServer(threadID: int) {.async.} =
         asyncSpawn accepts()
 
 
-        trace "Started Ws Server", internalPort = globals.cf_listen_port
+        info "Started Ws Server", internalPort = globals.cf_listen_port
         await server.join()
 
 proc logs(){.async.} =
