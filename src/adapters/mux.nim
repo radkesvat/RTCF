@@ -120,6 +120,8 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
         if not isNil(self.readloopFut): cancelSoon(self.readloopFut)
         # self.handles.apply do(x:tuple[c: Cid, f: Future[void]]): cancelSoon x.f
 
+        safeAccess:
+            self.handles.apply do(x:tuple[c: Cid, f: Future[void]]):  discard globalTable[x.c].second.send(closePacket(self, x.c))
 
 
 
