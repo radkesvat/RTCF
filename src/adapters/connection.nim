@@ -48,10 +48,10 @@ proc readloop(self: ConnectionAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
-            if sv.len != await socket.write(sv.buf, sv.len).wait(3000):
+            if sv.len != await socket.write(sv.buf, sv.len).wait(5000):
                 raise newAsyncStreamIncompleteError()
 
-        except [CancelledError, FlowError, TransportError,AsyncChannelError, AsyncStreamError]:
+        except [CancelledError, FlowError,AsyncTimeoutError,TransportError,AsyncChannelError, AsyncStreamError]:
             var e = getCurrentException()
             warn "Readloop Cancel [Write]", msg = e.name
             if not self.stopped: signal(self, both, close)
