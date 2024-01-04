@@ -45,7 +45,7 @@ check_dependencies() {
     
     local dependencies=("wget" "lsof" "iptables" "unzip" "curl" "socat")
     
-    sudo "${pm}" update -y
+    sudo $pm update -y
     
     for dep in "${dependencies[@]}"; do
         if ! command -v "${dep}" &> /dev/null; then
@@ -86,84 +86,131 @@ check_port() {
 
 #Get certificates
 install_certs() {
-    echo ""
     echo -e "${cyan}Methods of applying certificate:${rest}"
-    echo -e "${green}1.${rest} Acme (Domain Required)${rest}"
-    echo -e "${green}2.${rest} Custom path${rest}"
+    echo -e "${green}1.${rest} Certbot${yellow} [default]${rest}"
+    echo -e "${green}2.${rest} Acme (Domain Required)${rest}"
+    echo -e "${green}3.${rest} Custom path${rest}"
     echo ""
-    
-    read -rp "Please enter options [1-2]: " certInput
+
+    read -rp "Please enter options [1-3]: " certInput
     check_port
-    
-    if [[ $certInput == 1 ]]; then
-        
-        cert_path="/root/cf_certs/cert.crt"
-        key_path="/root/cf_certs/private.key"
-        [ ! -f "$cert_path" ] && mkdir /root/cf_certs && touch "$cert_path" "$key_path"
-        
-        if [[ -f $cert_path && -f $key_path && -s $cert_path && -s $key_path && -f /root/cf_certs/ca.log ]]; then
-            domain=$(cat /root/cf_certs/ca.log)
-            echo -e "${green}The certificate of the original domain name: $domain was detected and is being applied${rest}"
-        else
-        
-            echo -e "${green}-----------------------------------${rest}"
-            read -p "Please enter your domain name：" domain
-            [[ -z $domain ]] && red "No domain name entered, unable to perform operation！" && exit 1
-            echo -e "${green}Domain name entered: $domain${rest}" && sleep 1
-            domainIP=$(dig +short "${domain}")
-            ID=$(lsb_release -si)
-            ip=$(hostname -I | awk '{print $1}')
-            if [[ $domainIP == $ip ]]; then
-                if [[ $ID == "CentOS" ]]; then
-                    $pm install cronie -y
-                    systemctl start crond
-                    systemctl enable crond
-                else
-                    $pm install cron -y
-                    systemctl start cron
-                    systemctl enable cron
-                fi
-                check_port
-                curl https://get.acme.sh | sh -s email=$(date +%s%N | md5sum | cut -c 1-16)@gmail.com
-                source ~/.bashrc
-                bash ~/.acme.sh/acme.sh --upgrade --auto-upgrade
-                bash ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-                if [[ -n $(echo $ip | grep ":") ]]; then
-                    bash ~/.acme.sh/acme.sh --issue -d ${domain} --standalone -k ec-256 --listen-v6 --insecure
-                else
-                    bash ~/.acme.sh/acme.sh --issue -d ${domain} --standalone -k ec-256 --insecure
-                fi
-                bash ~/.acme.sh/acme.sh --install-cert -d ${domain} --key-file $key_path --fullchain-file $cert_path --ecc
-                if [[ -f $cert_path && -f $key_path ]] && [[ -s $cert_path && -s $key_path ]]; then
-                    echo $domain > /root/cf_certs/ca.log
-                    sed -i '/--cron/d' /etc/crontab >/dev/null 2>&1
-                    echo "0 0 * * * root bash /root/.acme.sh/acme.sh --cron -f >/dev/null 2>&1" >> /etc/crontab
-                    echo -e "${green}-----------------------------------${rest}"
-                    echo -e "${green}Successful! The certificate (cer.crt) and private key (private.key) saved in /root/cf_certs${rest}"
-                    echo -e "${green}The certificate crt file path: $cert_path${rest}"
-                    echo -e "${green}The private key file path: $key_path${rest}"
-                    chmod 755 $cert_path
-                    chmod 755 $key_path
-                    chmod 755 /root/cf_certs/ca.log
-                fi
-            else
-                echo -e "${red}The IP resolved by the current domain name does not match the real IP used by the current VPS${rest}"
-                echo -e "${green}uggestions below :${rest}"
-                echo -e "${yellow}1. Please make sure that CloudFlare is turned off (DNS only). The same applies to other domain name resolution or CDN website settings.${rest}"
-                echo -e "${yellow}2. Please check whether the IP set by DNS resolution is the real IP of the VPS${rest}"
-                exit 1
-            fi
-        fi
+    cert_path="/root/cf_certs/cert.crt"
+    key_path="/root/cf_certs/private.key"
+    [ ! -f "$cert_path" ] && mkdir -p /root/cf_certs && touch "$cert_path" "$key_path"
+
+    if [[ -s $cert_path && -s $key_path && -f /root/cf_certs/do.log ]]; then
+        domain=$(cat /root/cf_certs/do.log)
+        echo -e "${green}The certificate of the original domain name: $domain was detected and is being applied${rest}"
     else
-        read -p "Please enter the path of the crt file：" cert_path
-        echo -e "${yellow}The path of the public key：$cert_path${rest}"
-        
-        read -p "Please enter the path to the key file：" key_path
-        echo -e "${yellow}The path of the private key：$key_path${rest}"
-        
-        read -p "Please Enter Your Domain Name：" domain
-        echo -e "${yellow}Your domain：$domain${rest}"
+        case $certInput in
+            1|"") # Certbot
+                echo -e "${green}-----------------------------------${rest}"
+                read -rp "Please enter your domain name: " domain
+                [[ -z $domain ]] && echo -e "${red}No domain name entered, unable to perform operation!${rest}" && exit 1
+                echo -e "${green}Domain name entered: $domain${rest}" && sleep 1
+                validate_domain $domain
+                certbot_install
+                ;;
+            2) # Acme (Domain Required)
+                read -rp "Please enter your domain name: " domain
+                validate_domain $domain
+                acme_install $domain
+                ;;
+            3) # Custom path
+                echo -e "${green}-----------------------------------${rest}"
+                read -rp "Please enter the path of the [Public key] crt file: " cert_path
+                echo -e "${yellow}Your PublicKey path : $cert_path${rest}"
+                echo -e "${green}-----------------------------------${rest}"
+                read -rp "Please enter the path of the[Private key] key file: " key_path
+                echo -e "${yellow}Your Privatekey path: $key_path${rest}"
+                echo -e "${green}-----------------------------------${rest}"
+                read -rp "Please enter your domain name: " domain
+                echo -e "${yellow}Your domain: $domain${rest}"
+                echo -e "${green}-----------------------------------${rest}"
+                ;;
+            *)
+                echo -e "${red}Invalid option!${rest}" && exit 1
+                ;;
+        esac
     fi
+
+    chmod 755 $cert_path
+    chmod 755 $key_path
+    chmod 755 /root/cf_certs
+    chmod 755 /root/cf_certs/do.log
+
+    echo -e "${green}-----------------------------------${rest}"
+    echo -e "${green}Successful! The certificate (cer.crt) and private key (private.key) saved in /root/cf_certs${rest}"
+    echo -e "${green}The certificate crt file path: $cert_path${rest}"
+    echo -e "${green}The private key file path: $key_path${rest}"
+}
+
+#validate_domain
+validate_domain() {
+    domain=$1
+    domainIP=$(dig +short "${domain}")
+    ip=$(curl -s4m8 ip.sb -k) || ip=$(curl -s6m8 ip.sb -k)
+
+    if [[ $domainIP != $ip ]]; then
+        echo -e "${red}The IP resolved by the current domain name does not match the real IP used by the current VPS${rest}"
+        echo -e "${green}Suggestions below:${rest}"
+        echo -e "${yellow}1. Please make sure that CloudFlare is turned off (DNS only). The same applies to other domain name resolution or CDN website settings.${rest}"
+        echo -e "${yellow}2. Please check whether the IP set by DNS resolution is the real IP of the VPS${rest}"
+        exit 1
+    fi
+}
+
+#cron
+setup_cron() {
+    ID=$(lsb_release -si)
+    if [[ $ID == "CentOS" ]]; then
+        $pm install cronie -y
+        systemctl start crond
+        systemctl enable crond
+    else
+        $pm install cron -y
+        systemctl start cron
+        systemctl enable cron
+    fi
+
+    sed -i '/--cron/d' /etc/crontab >/dev/null 2>&1
+    echo "0 0 * * * root bash /root/.acme.sh/acme.sh --cron -f >/dev/null 2>&1" >> /etc/crontab
+}
+
+#install acme
+acme_install() {
+    check_port
+    curl https://get.acme.sh | sh -s email=$(date +%s%N | md5sum | cut -c 1-16)@gmail.com
+    source ~/.bashrc
+    bash ~/.acme.sh/acme.sh --upgrade --auto-upgrade
+    bash ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+
+    if [[ -n $(echo $ip | grep ":") ]]; then
+        bash ~/.acme.sh/acme.sh --issue -d ${domain} --standalone -k ec-256 --listen-v6 --insecure
+    else
+        bash ~/.acme.sh/acme.sh --issue -d ${domain} --standalone -k ec-256 --insecure
+    fi
+
+    bash ~/.acme.sh/acme.sh --install-cert -d ${domain} --key-file $key_path --fullchain-file $cert_path --ecc
+
+    if [[ -s $cert_path && -s $key_path ]]; then
+        echo $domain > /root/cf_certs/do.log
+        setup_cron
+    else
+        echo -e "${red}Certificate installation failed.${rest}" && exit 1
+    fi
+}
+
+#Install certbot
+certbot_install() {
+    check_port
+    $pm install certbot -y
+    certbot certonly --standalone --agree-tos --register-unsafely-without-email -d $domain
+    cert_path_lets="/etc/letsencrypt/live/$domain/fullchain.pem"
+    key_path_lets="/etc/letsencrypt/live/$domain/privkey.pem"
+    cp $cert_path_lets $cert_path
+    cp $key_path_lets $key_path
+    echo $domain > /root/cf_certs/do.log
 }
 
 #Check installed service
@@ -291,6 +338,7 @@ configure_arguments() {
 # Function to handle installation
 install() {
     root_access
+    check_installed
     check_dependencies
     check_installed
     get_rtcf
@@ -316,7 +364,8 @@ EOL
     sudo systemctl daemon-reload
     sudo systemctl start rtcf.service
     sudo systemctl enable rtcf.service
-    sleep 1 && echo "" && check_tunnel_status
+    echo "Checking status..."
+    sleep 2 && echo "" && check_tunnel_status
 }
 
 # Function to handle uninstallation
@@ -331,19 +380,18 @@ uninstall() {
     sudo systemctl stop rtcf.service
     sudo systemctl disable rtcf.service
 
-    # Get the domain from the ca.log file
-    if [ -f "/root/cf_certs/ca.log" ]; then
-        domain=$(cat /root/cf_certs/ca.log)
-    else
-        echo "Error: Unable to find the domain information."
-        return
+    # Get the domain from the do.log file
+    if [ -f "/root/cf_certs/do.log" ]; then
+        domain=$(cat /root/cf_certs/do.log)
     fi
 
     # Remove service file
     sudo rm /etc/systemd/system/rtcf.service
     sudo systemctl reset-failed
     sudo rm /usr/local/bin/RTCF
-    sudo rm -rf "/root/.acme.sh/$domain"
+    sudo rm -rf "/root/.acme.sh/$domain" > /dev/null 2>&1
+    sudo rm -rf "/etc/letsencrypt/live/$domain" > /dev/null 2>&1
+    sudo rm -rf "/root/cf_certs" > /dev/null 2>&1
 
     echo -e "${green}Uninstallation completed successfully.${rest}"
 }
