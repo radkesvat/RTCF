@@ -271,6 +271,32 @@ proc recvSync*[Msg](chan: AsyncChannel[Msg]): Msg =
     chan.releaseLock()
 
 
+
+proc trySend*[Msg](chan: AsyncChannel[Msg], msg: Msg):bool =
+  ## Immediately send message ``msg`` over channel ``chan``. This procedure will
+  ## block until internal channel's queue is full.
+  chan.acquireLock()
+  try:
+    if chan.refCount == 0:
+      raiseChannelClosed()
+
+    if chan.maxItems > 0:
+      # Wait until count is less then `maxItems`.
+      if chan.count >= chan.maxItems:
+        return false
+
+    rawSend(chan, unsafeAddr msg, sizeof(Msg))
+    discard chan.eventNotEmpty.fireSync()
+    return true
+
+  finally:
+    chan.releaseLock()
+
+
+
+
+
+
 proc drain*[Msg](chan: AsyncChannel[Msg],consumer: proc(arg:MSG):void) =
   ## Blocking receive message ``Msg`` from channel ``chan``.
   chan.acquireLock()
@@ -279,7 +305,7 @@ proc drain*[Msg](chan: AsyncChannel[Msg],consumer: proc(arg:MSG):void) =
     when not defined(release): assert chan.refCount == 0
     #   raiseChannelClosed()
 
-    while not(chan.count <= 0):
+    while (chan.count > 0):
       rawRecv(chan, addr buf, sizeof(Msg))
       consumer(buf)
 
