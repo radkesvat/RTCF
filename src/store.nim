@@ -64,6 +64,8 @@ proc pop*(self: Store): Stringview =
         self.requires 1
         result = self.available.pop()
 
+proc malloc_trim(len: csize_t): cint {.importc, header: "malloc.h".}
+
 
 proc reuse*(self: Store, v: sink Stringview) =
     safe(self):
@@ -78,11 +80,13 @@ proc reuse*(self: Store, v: sink Stringview) =
         v.reset()
         self.available.add(v)
 
-        if self.available.len > (self.maxCap) + DefaultStoreCap:
+        if self.available.len >= (self.maxCap + (self.maxCap div 2)):
             warn "Shrinking memory", wasleft = self.available.len, cap = self.maxCap
-            for i in 0..<DefaultStoreCap:
+            for i in 0 ..< (self.maxCap):
                 var x = self.available.pop()
                 x.destroy()
+            self.maxCap = self.maxCap div 2
+            discard malloc_trim(0)
 
 proc getRandomBuf*(self: Store, variety: int = 50): pointer =
     addr self.randomBuf[rand(0 .. variety)]

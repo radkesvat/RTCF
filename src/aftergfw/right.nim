@@ -50,10 +50,10 @@ proc standAloneChain(){.async.} =
         asyncSpawn standAloneChain()
 
     try:
-        var ws_r = await connect().wait(2.seconds)
+        var ws_r = await connect().wait(4.seconds)
         var ws_w =
             try:
-                await connect().wait(2.seconds)
+                await connect().wait(4.seconds)
             except:
                 asyncSpawn ws_r.close()
                 raise
@@ -65,7 +65,7 @@ proc standAloneChain(){.async.} =
         info "Connected to the target!"
 
     except:
-        # print getCurrentException()
+        print getCurrentException()
         asyncSpawn reconnect()
 
 

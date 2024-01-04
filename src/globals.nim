@@ -307,7 +307,7 @@ proc init*() =
                                 cert = autoCert
                                 pkey = autoPKey
                         else:
-                            automode = off
+                            automode = false
 
                     of "password":
                         password = (p.val)
