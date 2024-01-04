@@ -295,7 +295,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     self.store.reuse move data
 
 
-    except [CancelledError, AsyncChannelError, FlowError, TransportError]:
+    except [CancelledError, AsyncChannelError,WSClosedError, FlowError, TransportError]:
         var e = getCurrentException()
         trace "Readloop canceled", name = e.name, msg = e.msg
     except AsyncStreamError as e:
