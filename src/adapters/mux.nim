@@ -45,7 +45,7 @@ const
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
     ConnectionChanFixedSizeW = 1
-    ConnectionChanFixedSizeR = 200
+    ConnectionChanFixedSizeR = 4096
 
 
 var globalTable: ptr UncheckedArray[DualChan]
