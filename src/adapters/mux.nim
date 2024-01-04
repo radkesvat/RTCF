@@ -167,22 +167,14 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
         except [CancelledError, AsyncStreamError, TransportError, FlowError, WebSocketError]:
             var e = getCurrentException()
             error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
-            if self.location == BeforeGfw:
-                # no need to reuse non-nil sv because write have to
-                if not sv.isNil:
-                    notice "saving ", cid = cid
-                    asyncSpawn muxSaveQueue.send (cid, sv)
-            else:
-                {.cast(raises: []), gcsafe.}:
-                    var copy: DualChan
-                    safeAccess:
-                        copy = globalTable[cid]
-                        system.reset(globalTable[cid])
-                    copy.first.close()
-                    copy.first.close()
-                    copy.second.drain(proc(x: StringView) = (if x != nil: self.store.reuse x))
-                    copy.second.close()
-
+            
+            # no need to reuse non-nil sv because write have to
+            if not sv.isNil:
+                if self.location == AfterGfw:
+                    asyncSpawn globalTable[cid].second.send(closePacket(self, cid))
+                notice "saving ", cid = cid
+                asyncSpawn muxSaveQueue.send (cid, sv)
+        
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
