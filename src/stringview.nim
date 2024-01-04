@@ -344,8 +344,11 @@ proc reset*(v: StringView) =
 proc destroy*(v: var StringView) =
     reset v
     when hasThreadSupport:
+        
+        deallocShared v[].pbuf
         deallocShared v
     else:
+        dealloc v[].pbuf
         dealloc v
     v = nil
 

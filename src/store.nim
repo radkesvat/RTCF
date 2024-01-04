@@ -39,7 +39,7 @@ proc newStore*(cap = DefaultStoreCap): Store =
     for i in 0 ..< cap:
         result.available[i] = newStringView(cap = DefaultStrvCap)
     result.maxCap = cap
-    result.randomBuf = newStringOfCap(cap = 1_000_00) 
+    result.randomBuf = newStringOfCap(cap = 1_000_00)
     result.randomBuf.setLen 1_000_00
     for i in 0 ..< result.randomBuf.len():
         result.randomBuf[i] = rand(char.low .. char.high).char
@@ -76,9 +76,13 @@ proc reuse*(self: Store, v: sink Stringview) =
                 doAssert false
 
         v.reset()
-
-
         self.available.add(v)
+
+        if self.available.len > (self.maxCap) + DefaultStoreCap:
+            warn "Shrinking memory", wasleft = self.available.len, cap = self.maxCap
+            for i in 0..<DefaultStoreCap:
+                var x = self.available.pop()
+                x.destroy()
 
 proc getRandomBuf*(self: Store, variety: int = 50): pointer =
     addr self.randomBuf[rand(0 .. variety)]
