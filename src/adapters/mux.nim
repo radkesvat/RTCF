@@ -265,10 +265,12 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                             globalLock.release()
                             break
                 else:
-                    if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
+                    while globalTableHas(cid):
                         try:
-                            while not (globalTable[cid].second.trySend(data)):
+                            if not (globalTable[cid].second.trySend(data)):
                                 await sleepAsync(50)
+                                continue
+
                             data = nil; break operation
                         except AsyncChannelError as e:
                             # channel is half closed ...
