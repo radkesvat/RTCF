@@ -10,8 +10,10 @@ const libs_dir = "libs"
 const output_dir = "dist"
 const src_dir = "src"
 const tests_dir = "tests" #sources located inside src
+const utils_dir = "utils" #sources located inside src
 const bindings_dir = "generator" #sources located inside src
 const bindings_output_dir = "generated" #sources located inside src
+
 const build_cache = hostOS/hostCPU
 const nimble_path = libs_dir&"/nimble"
 
@@ -171,6 +173,7 @@ template sharedBuildSwitches(){.dirty.} =
     switch("d", "asyncBackend:chronos")
 
     switch("path", src_dir)
+    switch("path", src_dir/utils_dir)
     switch("path", libs_dir)
     switch("path", libs_dir&"/chronos/")
     switch("passC", "-I "&libs_dir&"/hwinfo/include/")
@@ -189,7 +192,7 @@ template sharedBuildSwitches(){.dirty.} =
     switch("d", "chronicles_colors=AnsiColors")
     switch("d", "chronicles_disable_thread_id")
     switch("d", "chronicles_timestamps=none")
-    switch("import", src_dir/"helpers.nim")
+    switch("import", src_dir/utils_dir/"helpers.nim")
 
 
     when declared(auto_domain):

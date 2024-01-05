@@ -19,11 +19,15 @@ type StoreIML = object
 type Store* = ptr StoreIML
 
 template safe(s: Store, body) =
-    s.lock.acquire()
-    try:
+    when hasThreadSupport:
+        s.lock.acquire()
+        try:
+            body
+        finally:
+            s.lock.release()
+    else:
         body
-    finally:
-        s.lock.release()
+
 
 
 proc newStore*(cap = DefaultStoreCap): Store =

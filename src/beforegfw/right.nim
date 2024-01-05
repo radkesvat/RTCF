@@ -13,6 +13,9 @@ var foundpeer = false
 var sw: WSSession = nil
 var sr: WSSession = nil
 
+var activeCons = 0
+
+
 proc handle(request: HttpRequest) {.async.} =
 
     trace "Handling request:", uri = request.uri.path
@@ -22,11 +25,6 @@ proc handle(request: HttpRequest) {.async.} =
         request.stream.close()
         warn "rejected websocket connection, password mismatch!"
         return
-
-    if not foundpeer:
-        foundpeer = true
-        lockpeerConnected:
-            peerConnected = true
 
     try:
         let foctories = case globals.compressor:
@@ -48,8 +46,14 @@ proc handle(request: HttpRequest) {.async.} =
                 sw = ws
             else:
                 sr = ws
+                setIsPeerConnected true
+                inc activeCons
+
                 var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
-                var ws_adapter = newWebsocketAdapter(socketr = sr, socketw = sw, store = publicStore,onClose = nil)
+                var ws_adapter = newWebsocketAdapter(socketr = sr, socketw = sw, store = publicStore, onClose =
+                    proc() =
+                        dec activeCons; if activeCons <= 0: setIsPeerConnected false
+                )
                 mux_adapter.chain(ws_adapter)
                 mux_adapter.signal(both, start)
                 sr = nil; sw = nil

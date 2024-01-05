@@ -34,7 +34,8 @@ type
 
 const
     bufferSize = 4093
-
+    writeTimeOut = 3
+    readTimeOut = 400
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
 proc writeloop(self: ConnectorAdapter){.async.} =

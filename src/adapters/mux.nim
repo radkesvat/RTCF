@@ -45,7 +45,7 @@ const
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
     ConnectionChanFixedSizeW = 1
-    ConnectionChanFixedSizeR = 8192
+    ConnectionChanFixedSizeR = 8192 # 32 megabytes of buffering (per con)
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -245,8 +245,9 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
                     try:
                         if not (globalTable[cid].second.trySend(data)):
-                            self.store.reuse move data
-                            discard globalTable[cid].first.send(closePacket(self, cid))
+                            await globalTable[cid].second.send(data)
+                            # self.store.reuse move data
+                            # discard globalTable[cid].first.send(closePacket(self, cid))
                         data = nil; continue
                     except AsyncChannelError as e:
                         # channel is half closed ...

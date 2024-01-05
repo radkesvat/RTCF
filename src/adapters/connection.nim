@@ -23,6 +23,8 @@ type
 
 const
     bufferSize = 4093
+    writeTimeOut = 5
+    readTimeOut = 400
 
 
 proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.socket
@@ -48,7 +50,7 @@ proc readloop(self: ConnectionAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
-            if sv.len != await socket.write(sv.buf, sv.len).wait(5000):
+            if sv.len != await socket.write(sv.buf, sv.len).wait(writeTimeOut.seconds):
                 raise newAsyncStreamIncompleteError()
 
         except [CancelledError, FlowError,AsyncTimeoutError,TransportError,AsyncChannelError, AsyncStreamError]:
@@ -72,7 +74,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
         try:
             sv = self.store.pop()
             sv.reserve(bufferSize)
-            var actual = await socket.readOnce(sv.buf(), bufferSize)
+            var actual = await socket.readOnce(sv.buf(), bufferSize).wait(readTimeOut.seconds)
             if actual == 0:
                 trace "Writeloop read 0 !";
                 self.store.reuse move sv
@@ -82,7 +84,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
                 trace "Writeloop read", bytes = actual
             sv.setLen(actual)
 
-        except [CancelledError, TransportError,AsyncChannelError]:
+        except [CancelledError, TransportError,AsyncTimeoutError,AsyncChannelError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Read]", msg = e.name
             self.store.reuse sv

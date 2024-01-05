@@ -9,7 +9,7 @@ logScope:
     topic = "Kharej RightSide"
 
 
-const parallelCons = 2
+const parallelCons = 8
 
 var disconnectEV = newAsyncEvent()
 var activeCons = 0
@@ -38,7 +38,7 @@ proc connect(): Future[WSSession] {.async.} =
 
             return ws
         except [WebSocketError, HttpError]:
-            var e = getCurrentException()
+            var e = getCurrentException()   
             error "Websocket error", name = e.name, msg = e.msg
             raise e
 
@@ -47,7 +47,6 @@ proc standAloneChain(){.async.} =
     trace "Initiating connection"
     {.cast(raises: []), gcsafe.}:
         try:
-
             var ws_r = await connect().wait(3.seconds)
             var ws_w =
                 try:
