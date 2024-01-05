@@ -1,6 +1,6 @@
 import threading/[channels], store
 when helpers.hasThreadSupport:
-    import atomics
+    import threading/atomics
 from adapters/mux import Cid
 export channels, Cid
 
