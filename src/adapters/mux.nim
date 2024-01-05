@@ -45,7 +45,7 @@ const
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
     ConnectionChanFixedSizeW = 1
-    ConnectionChanFixedSizeR = 2096 # 32 megabytes of buffering (per con)
+    ConnectionChanFixedSizeR = 4192 # 16 megabytes of buffering (per con)
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -244,9 +244,9 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             safeAccess:
                 if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
                     try:
-                        globalTable[cid].second.sendSync(data)
-                        # if not (globalTable[cid].second.trySend(data)):
-                            # await globalTable[cid].second.send(data)
+                        # globalTable[cid].second.sendSync(data)
+                        while not (globalTable[cid].second.trySend(data)):
+                            await sleepAsync(100)
                             # self.store.reuse move data
                             # discard globalTable[cid].first.send(closePacket(self, cid))
                         data = nil; continue
