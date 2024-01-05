@@ -252,16 +252,17 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                                     await sleepAsync(50)
                                     continue
                                 globalLock.release()
-
                                 # self.store.reuse move data
                                 # discard globalTable[cid].first.send(closePacket(self, cid))
                                 data = nil; break operation
                             except AsyncChannelError as e:
                                 # channel is half closed ...
+                                globalLock.release()
                                 self.store.reuse move data
                                 warn "read loop was about to write data to a half closed chanenl!", msg = e.msg, cid = cid
                                 break operation
                         else:
+                            globalLock.release()
                             break
                 else:
                     if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
