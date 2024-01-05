@@ -185,18 +185,18 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
 
 
 
-proc register(self: MuxAdapetr,cid: Cid, firstdata: StringView = nil) =
-        var fut = self.handleCid(cid, firstdata)
-        self.handles.add fut
-        fut.callback = proc(udata: pointer) =
-            let index = self.handles.find fut
-            if index != -1: self.handles.del index
-        asyncSpawn fut
+proc register(self: MuxAdapetr, cid: Cid, firstdata: StringView = nil) =
+    var fut = self.handleCid(cid, firstdata)
+    self.handles.add fut
+    fut.callback = proc(udata: pointer) =
+        let index = self.handles.find fut
+        if index != -1: self.handles.del index
+    asyncSpawn fut
 
 proc restore(self: MuxAdapetr) =
     while muxSaveQueue.dataLeft() > 0:
         try:
-            var (cid, data) =  muxSaveQueue.recvSync()
+            var (cid, data) = muxSaveQueue.recvSync()
             notice "Restored", cid = cid
             self.register(cid, data)
         except:
@@ -240,53 +240,71 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
 
 
 
+            block operation:
+                when hasThreadSupport:
+                    while true:
+                        globalLock.acquire()
+                        if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
+                            try:
+                                # globalTable[cid].second.sendSync(data)
+                                if not (globalTable[cid].second.trySend(data)):
+                                    globalLock.release()
+                                    await sleepAsync(50)
+                                    continue
+                                globalLock.release()
 
-            safeAccess:
-                if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
-                    try:
-                        # globalTable[cid].second.sendSync(data)
-                        while not (globalTable[cid].second.trySend(data)):
-                            await sleepAsync(100)
-                            # self.store.reuse move data
-                            # discard globalTable[cid].first.send(closePacket(self, cid))
-                        data = nil; continue
-                    except AsyncChannelError as e:
-                        # channel is half closed ...
+                                # self.store.reuse move data
+                                # discard globalTable[cid].first.send(closePacket(self, cid))
+                                data = nil; break operation
+                            except AsyncChannelError as e:
+                                # channel is half closed ...
+                                self.store.reuse move data
+                                warn "read loop was about to write data to a half closed chanenl!", msg = e.msg, cid = cid
+                                break operation
+                        else:
+                            break
+                else:
+                    if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
+                        try:
+                            await globalTable[cid].second.send(data)
+                            data = nil; break operation
+                        except AsyncChannelError as e:
+                            # channel is half closed ...
+                            self.store.reuse move data
+                            warn "read loop was about to write data to a half closed chanenl!", msg = e.msg, cid = cid
+                            break operation
+
+
+                if size == 0: self.store.reuse move data; break operation # dont do anything
+
+                case whenNotFound:
+                    of create:
+                        # echo "make:      ",cid
+                        trace "creating left channels", cid = cid
+                        safeAccess:
+                            globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeW)
+                            globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeR)
+                            globalTable[cid].first.open()
+                            globalTable[cid].second.open()
+                        trace "data is written to created channel", cid = cid
+                        var fut = self.handleCid(cid)
+                        self.handles.add fut
+                        fut.callback = proc(udata: pointer) =
+                            let index = self.handles.find fut
+                            if index != -1: self.handles.del index
+                        asyncSpawn fut
+                        await globalTable[cid].second.send move data
+                        self.masterChannel.sendSync cid
+                    of sendclose:
+                        if size > 0:
+                            self.store.reuse move data
+                            # trace "sending close for", cid = cid
+                            # # echo "close-back:  ",cid
+                            # await procCall write(Tunnel(self), closePacket(self, cid))
+                        else:
+                            self.store.reuse move data
+                    of nothing:
                         self.store.reuse move data
-                        warn "read loop was about to write data to a half closed chanenl!", msg = e.msg, cid = cid
-                        continue
-
-
-            if size == 0: self.store.reuse move data; continue # dont do anything
-
-            case whenNotFound:
-                of create:
-                    # echo "make:      ",cid
-                    trace "creating left channels", cid = cid
-                    safeAccess:
-                        globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeW)
-                        globalTable[cid].second = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeR)
-                        globalTable[cid].first.open()
-                        globalTable[cid].second.open()
-                    trace "data is written to created channel", cid = cid
-                    var fut = self.handleCid(cid)
-                    self.handles.add fut
-                    fut.callback = proc(udata: pointer) =
-                        let index = self.handles.find fut
-                        if index != -1: self.handles.del index
-                    asyncSpawn fut
-                    await globalTable[cid].second.send move data
-                    self.masterChannel.sendSync cid
-                of sendclose:
-                    if size > 0:
-                        self.store.reuse move data
-                        # trace "sending close for", cid = cid
-                        # # echo "close-back:  ",cid
-                        # await procCall write(Tunnel(self), closePacket(self, cid))
-                    else:
-                        self.store.reuse move data
-                of nothing:
-                    self.store.reuse move data
 
 
     except [CancelledError, AsyncChannelError, WSClosedError, FlowError, TransportError]:
