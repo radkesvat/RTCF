@@ -21,7 +21,7 @@ const backend = "c"
 const compiler = "gcc" #gcc, switch_gcc, llvm_gcc, clang, bcc, vcc, tcc, env, icl, icc, clang_cl
 const gc = "orc" # refc(thread local) | boehm
 
-const threads = false
+const threads = true
 
 const enable_chronicles = true
 
@@ -221,8 +221,8 @@ template sharedBuildSwitches(){.dirty.} =
         switch("passL", " -s")
         switch("debuginfo", "off")
         switch("passC", "-DNDEBUG")
-        # switch("passC", "-flto")
-        # switch("passL", "-flto")
+        switch("passC", "-flto")
+        switch("passL", "-flto")
 
         switch("obj_checks", "off")
         switch("field_checks", "off")
