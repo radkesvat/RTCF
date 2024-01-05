@@ -249,7 +249,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                                 # globalTable[cid].second.sendSync(data)
                                 if not (globalTable[cid].second.trySend(data)):
                                     globalLock.release()
-                                    await sleepAsync(50)
+                                    await sleepAsync(25)
                                     continue
                                 globalLock.release()
                                 # self.store.reuse move data
@@ -267,7 +267,8 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 else:
                     if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
                         try:
-                            await globalTable[cid].second.send(data)
+                            while not (globalTable[cid].second.trySend(data)):
+                                await sleepAsync(25)
                             data = nil; break operation
                         except AsyncChannelError as e:
                             # channel is half closed ...
