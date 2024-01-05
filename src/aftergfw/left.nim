@@ -27,6 +27,8 @@ proc logs(){.async.} =
     while true:
         echo "left"
         await sleepAsync(1.seconds)
+
+        
 proc run*(thread: int) {.async.} =
     await sleepAsync(200.milliseconds)
     # if globals.accept_udp:

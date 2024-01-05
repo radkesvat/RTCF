@@ -109,6 +109,7 @@ proc createIptableMultiportRules(min: Port, max: Port, lport: Port, ruleudp: boo
 
 
 proc findCFPort(): Port =
+    info "Finding internal port"
     when defined(windows):
         var https_ports = [443, 2053, 2083, 2087, 2096, 8443]
         for p in https_ports:
@@ -119,7 +120,7 @@ proc findCFPort(): Port =
         let max = uint16.high
         for p in countdown(max, 0):
             if globals.listen_port != p.Port and isPortFree(p.Port): return p.Port
-        return 0.Port
+        return 0.Port   
 
 proc rightThread(threadID: int){.thread.} =
     warn "RightThread spawend"

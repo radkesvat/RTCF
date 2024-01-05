@@ -10,14 +10,13 @@ logScope:
 
 proc startTcpListener(threadID: int) {.async: (raises: []).} =
     {.cast(gcsafe).}:
-        var foundpeer = false
+       
         proc serveStreamClient(server: StreamServer,
                         transp: StreamTransport){.async: (raises: []).}=
             try:
-                if not foundpeer:
-                    lockpeerConnected:
-                        foundpeer = peerConnected
-                if not foundpeer:
+
+
+                if not isPeerConnected:
                     error "user connection but no foreign server connected yet!, closing..."
                     transp.close(); return
 

@@ -1,5 +1,5 @@
 import chronos
-import dns_resolve, hashes, pretty, parseopt, strutils, random, net, osproc, strformat
+import  hashes, pretty, parseopt, strutils, random, net, osproc, strformat
 import chronos/apps/http/[httpclient], stew/byteutils, json, os
 import checksums/sha1
 
@@ -7,7 +7,7 @@ import checksums/sha1
 logScope:
     topic = "Setup"
 
-const version = "0.6"
+const version = "0.7"
 
 
 type RunMode*{.pure.} = enum
@@ -96,6 +96,10 @@ proc ip6tablesInstalled(): bool {.used.} =
 proc lsofInstalled(): bool {.used.} =
     execCmdEx("""dpkg-query -W --showformat='${Status}\n' lsof|grep "install ok install"""").output != ""
 
+from nativesockets import getHostByName
+proc resolveIPv4*(address : string):string=
+    let host =  getHostByName(address)
+    return host.addrList[0]
 
 proc chooseRandomLPort(): Port =
     result = block:
