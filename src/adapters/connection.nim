@@ -23,7 +23,7 @@ type
 
 const
     bufferSize = 4093
-    writeTimeOut = 5
+    writeTimeOut = 2
     readTimeOut = 400
 
 

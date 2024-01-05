@@ -244,8 +244,9 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             safeAccess:
                 if not (isNil(globalTable[cid].first) or isNil(globalTable[cid].second)):
                     try:
-                        if not (globalTable[cid].second.trySend(data)):
-                            await globalTable[cid].second.send(data)
+                        globalTable[cid].second.sendSync(data)
+                        # if not (globalTable[cid].second.trySend(data)):
+                            # await globalTable[cid].second.send(data)
                             # self.store.reuse move data
                             # discard globalTable[cid].first.send(closePacket(self, cid))
                         data = nil; continue
