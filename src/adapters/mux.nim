@@ -45,7 +45,7 @@ const
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
     ConnectionChanFixedSizeW = 1
-    ConnectionChanFixedSizeR = 4192 # 16 megabytes of buffering (per con)
+    ConnectionChanFixedSizeR = 2048 # 16 megabytes of buffering (per con)
 
 
 var globalTable: ptr UncheckedArray[DualChan]
