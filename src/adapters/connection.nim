@@ -20,14 +20,19 @@ type
         readLoopFut: Future[void]
         writeLoopFut: Future[void]
         store: Store
+        firstTimeOut: Future[void]
 
 const
     bufferSize = 4093
-    writeTimeOut = 2
+    writeTimeOut = 3
     readTimeOut = 200
+    firstTimeOut = 5
 
 
 proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.socket
+
+
+
 
 # called when we are on the right side
 proc readloop(self: ConnectionAdapter){.async.} =
@@ -70,11 +75,13 @@ proc writeloop(self: ConnectionAdapter){.async.} =
     #read data from socket, write to chain
     var socket = self.socket
     var sv: StringView = nil
+    var timeout = firstTimeOut
     while not self.stopped:
         try:
             sv = self.store.pop()
             sv.reserve(bufferSize)
-            var actual = await socket.readOnce(sv.buf(), bufferSize).wait(readTimeOut.seconds)
+            var actual = await socket.readOnce(sv.buf(), bufferSize).wait(timeout)
+            timeout = readTimeOut
             if actual == 0:
                 trace "Writeloop read 0 !";
                 self.store.reuse move sv
