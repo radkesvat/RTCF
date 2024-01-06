@@ -34,7 +34,6 @@ type
 
 const
     bufferSize = 4093
-    writeTimeOut = 5
     readTimeOut = 200
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
@@ -45,7 +44,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
         try:
             sv = self.store.pop()
             sv.reserve(bufferSize)
-            var actual = await self.socket.readOnce(sv.buf(), bufferSize)
+            var actual = await self.socket.readOnce(sv.buf(), bufferSize).wait(readTimeOut.seconds)
             if actual == 0:
                 trace "Writeloop read 0 !";
                 self.store.reuse move sv
