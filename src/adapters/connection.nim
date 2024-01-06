@@ -20,7 +20,6 @@ type
         readLoopFut: Future[void]
         writeLoopFut: Future[void]
         store: Store
-        firstTimeOut: Future[void]
 
 const
     bufferSize = 4093
@@ -80,7 +79,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
         try:
             sv = self.store.pop()
             sv.reserve(bufferSize)
-            var actual = await socket.readOnce(sv.buf(), bufferSize).wait(timeout)
+            var actual = await socket.readOnce(sv.buf(), bufferSize).wait(timeout.seconds)
             timeout = readTimeOut
             if actual == 0:
                 trace "Writeloop read 0 !";
