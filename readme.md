@@ -44,7 +44,7 @@
 ```sh
 cat /proc/cpuinfo
 ```
-و جلوی cpu cores مینویسه چند هست دارید
+و جلوی cpu cores مینویسه چند هسته دارید
 
 
 
