@@ -1,10 +1,12 @@
 import chronos, chronos/transports/ipnet
 import adapters/[mux, connector], tunnel, tunnels/[port, transportident]
-import shared
+import shared, timerdispatcher
 from globals import nil
 
 logScope:
     topic = "Kharej LeftSide"
+
+var tdisp :TimerDispatcher
 
 
 proc startCoreConnector(threadID: int) {.async.} =
@@ -15,7 +17,7 @@ proc startCoreConnector(threadID: int) {.async.} =
             var targetip = parseIpAddress(globals.next_route_addr)
             block spawn:
                 var con_adapter = newConnectorAdapter(store = publicStore, ismultiport = globals.multi_port, targetIp = targetip,
-                targetPort = Port(globals.next_route_port))
+                targetPort = Port(globals.next_route_port),td = tdisp)
                 var port_tunnel = newPortTunnel(multiport = globals.multi_port, writeport = 0.Port)
                 var tident_tunnel = newTransportIdentTunnel()
                 var mux_adapter = newMuxAdapetr(cid = cid, master = masterChannel, store = publicStore, loc = AfterGfw)
@@ -31,6 +33,8 @@ proc logs(){.async.} =
         
 proc run*(thread: int) {.async.} =
     await sleepAsync(200.milliseconds)
+    tdisp = TimerDispatcher()
+    discard tdisp.start(globals.timeout_check_interval.seconds)
     # if globals.accept_udp:
     #     info "Mode Iran (Tcp + Udp)"
     # else:

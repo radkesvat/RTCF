@@ -86,7 +86,7 @@ proc closePacket(self: MuxAdapetr, cid: Cid): StringView =
     var sv = self.store.pop()
     sv.reserve(2)
     sv.write(0.uint16); sv.shiftl sizeof Cid
-    sv.write(cid.Cid)
+    sv.write(cid)
     return sv
 
 proc stop*(self: MuxAdapetr, sendclose: bool = true) =

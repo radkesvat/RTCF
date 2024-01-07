@@ -1,4 +1,4 @@
-import tunnel, store
+import tunnel, store, timerdispatcher
 import chronos/transports/stream
 
 
@@ -20,16 +20,18 @@ type
         readLoopFut: Future[void]
         writeLoopFut: Future[void]
         store: Store
+        lastUpdate: Moment
+        td: TimerDispatcher
+        td_id: int64
+        firstread: bool
 
 const
     bufferSize = 4093
-    writeTimeOut = 3
-    readTimeOut = 200
-    firstTimeOut = 5
-
+    timeOut = 20
+    firstReadTimeout = 3
 
 proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.socket
-
+template stillAlive(){.dirty.} = self.lastUpdate = Moment.now()
 
 
 
@@ -39,10 +41,11 @@ proc readloop(self: ConnectionAdapter){.async.} =
     var socket = self.socket
     var sv: StringView = nil
     while not self.stopped:
+        stillAlive()
         try:
             sv = await procCall read(Tunnel(self), 1)
             trace "Readloop Read", bytes = sv.len
-        except [CancelledError, FlowError,AsyncChannelError]:
+        except [CancelledError, FlowError, AsyncChannelError]:
             var e = getCurrentException()
             warn "Readloop Cancel [Read]", msg = e.name
             if not self.stopped: signal(self, both, close)
@@ -54,10 +57,10 @@ proc readloop(self: ConnectionAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
-            if sv.len != await socket.write(sv.buf, sv.len).wait(writeTimeOut.seconds):
+            if sv.len != await socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
 
-        except [CancelledError, FlowError,AsyncTimeoutError,TransportError,AsyncChannelError, AsyncStreamError]:
+        except [CancelledError, FlowError, AsyncTimeoutError, TransportError, AsyncChannelError, AsyncStreamError]:
             var e = getCurrentException()
             warn "Readloop Cancel [Write]", msg = e.name
             if not self.stopped: signal(self, both, close)
@@ -74,13 +77,17 @@ proc writeloop(self: ConnectionAdapter){.async.} =
     #read data from socket, write to chain
     var socket = self.socket
     var sv: StringView = nil
-    var timeout = firstTimeOut
     while not self.stopped:
+        stillAlive()
+
         try:
             sv = self.store.pop()
             sv.reserve(bufferSize)
-            var actual = await socket.readOnce(sv.buf(), bufferSize).wait(timeout.seconds)
-            timeout = readTimeOut
+
+            var actual = await socket.readOnce(sv.buf(), bufferSize).wait(
+                if self.firstread: self.firstread = false; firstReadTimeout.seconds else: InfiniteDuration
+                )
+
             if actual == 0:
                 trace "Writeloop read 0 !";
                 self.store.reuse move sv
@@ -90,7 +97,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
                 trace "Writeloop read", bytes = actual
             sv.setLen(actual)
 
-        except [CancelledError, TransportError,AsyncTimeoutError,AsyncChannelError]:
+        except [CancelledError, TransportError, AsyncTimeoutError, AsyncChannelError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Read]", msg = e.name
             self.store.reuse sv
@@ -106,10 +113,10 @@ proc writeloop(self: ConnectionAdapter){.async.} =
             trace "Writeloop write", bytes = sv.len
             await procCall write(Tunnel(self), move sv)
 
-        except [CancelledError, FlowError,AsyncChannelError]:
+        except [CancelledError, FlowError, AsyncChannelError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Write]", msg = e.name
-            if sv != nil:self.store.reuse sv
+            if sv != nil: self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
@@ -119,16 +126,24 @@ proc writeloop(self: ConnectionAdapter){.async.} =
 
 
 
-proc init(self: ConnectionAdapter, name: string, socket: StreamTransport, store: Store){.raises: [].} =
+proc init(self: ConnectionAdapter, name: string, socket: StreamTransport, store: Store, td: TimerDispatcher){.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
     self.socket = socket
     self.store = store
-    assert not self.socket.closed()
+    self.lastUpdate = Moment.now()
+    self.td = td
+    self.firstread = true
+    proc checkalive() =
+        if not self.stopped:
+            if self.lastUpdate + timeOut.seconds < Moment.now():
+                signal(self, both, close)
+
+    self.td_id = td.register(checkalive)
 
 
-proc newConnectionAdapter*(name: string = "ConnectionAdapter", socket: StreamTransport, store: Store): ConnectionAdapter {.raises: [].} =
+proc newConnectionAdapter*(name: string = "ConnectionAdapter", socket: StreamTransport, store: Store, td: TimerDispatcher): ConnectionAdapter {.raises: [].} =
     result = new ConnectionAdapter
-    result.init(name, socket, store)
+    result.init(name, socket, store, td)
     trace "Initialized", name
 
 
@@ -152,12 +167,14 @@ method start(self: ConnectionAdapter){.raises: [].} =
 proc stop*(self: ConnectionAdapter) =
     proc breakCycle(){.async.} =
         await sleepAsync(2.seconds)
-        self.signal(both,breakthrough)
+        self.signal(both, breakthrough)
 
     if not self.stopped:
         trace "stopping"
         self.stopped = true
         if not isNil(self.socket): self.socket.close()
+        self.td.unregister(self.td_id)
+
         if not isNil(self.readLoopFut): cancelSoon self.readLoopFut
         if not isNil(self.writeLoopFut): cancelSoon self.writeLoopFut
         asyncSpawn breakCycle()

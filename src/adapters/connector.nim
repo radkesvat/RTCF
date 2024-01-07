@@ -1,4 +1,4 @@
-import tunnel,  store
+import tunnel,  store, timerdispatcher
 import chronos/transports/stream
 import tunnels/[transportident,port]
 
@@ -28,23 +28,30 @@ type
         targetIp: IpAddress
         targetPort: Port
         connecting: bool
-        connectingFut: AsyncEvent
-        test: bool
+        connectingEv: AsyncEvent
+        lastUpdate: Moment
+        td: TimerDispatcher
+        td_id: int64
+        firstread: bool
 
 
 const
     bufferSize = 4093
-    readTimeOut = 200
+    timeOut = 20
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
+
+template stillAlive(){.dirty.}= self.lastUpdate = Moment.now()
+
 proc writeloop(self: ConnectorAdapter){.async.} =
     #read data from socket, write to chain
     var sv: StringView = nil
     while not self.stopped:
+        stillAlive()
         try:
             sv = self.store.pop()
             sv.reserve(bufferSize)
-            var actual = await self.socket.readOnce(sv.buf(), bufferSize).wait(readTimeOut.seconds)
+            var actual = await self.socket.readOnce(sv.buf(), bufferSize)
             if actual == 0:
                 trace "Writeloop read 0 !";
                 self.store.reuse move sv
@@ -84,8 +91,8 @@ proc writeloop(self: ConnectorAdapter){.async.} =
 
 proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
     assert self.socket == nil
-    assert not self.test
-    self.test = true
+
+
     var (tident, _) = self.findByType(TransportIdentTunnel, right)
     doAssert tident != nil, "connector adapter could not locate TransportIdentTunnel! it is required"
     self.protocol = if tident.isTcp: Tcp else: Udp
@@ -102,7 +109,7 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
                 var flags = {SocketFlags.TcpNoDelay, SocketFlags.ReuseAddr}
                 self.socket = await connect(target, flags = flags)
                 trace "connected to the target core"
-                self.connectingFut.fire()
+                self.connectingEv.fire()
                 self.writeLoopFut = self.writeloop()
                 asyncSpawn self.writeLoopFut
                 return true
@@ -121,6 +128,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
     #read data from chain, write to socket
     var sv: StringView = nil
     while not self.stopped:
+        stillAlive()
         try:
             sv = await procCall read(Tunnel(self), 1)
             trace "Readloop Read", bytes = sv.len
@@ -136,7 +144,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
         if not self.stopped and self.socket == nil:
             if self.connecting:
-                await self.connectingFut.wait()
+                await self.connectingEv.wait()
             elif await connect(self):discard
             else:
                 self.store.reuse move sv
@@ -165,19 +173,27 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
 
 
-proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpAddress, targetPort: Port, store: Store){.raises: [].} =
+proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpAddress, targetPort: Port, store: Store, td: TimerDispatcher){.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
     self.store = store
     self.isMultiPort = isMultiPort
     self.targetIp = targetIp
     self.targetPort = targetPort
+    self.lastUpdate = Moment.now()
+    self.td = td
+    self.firstread = true
+    proc checkalive() =
+        if not self.stopped:
+            if self.lastUpdate + timeOut.seconds < Moment.now():
+                signal(self, both, close)
 
+    self.td_id = td.register(checkalive)
 
 
 proc newConnectorAdapter*(name: string = "ConnectorAdapter", isMultiPort: bool, targetIp: IpAddress, targetPort: Port,
-        store: Store): ConnectorAdapter {.raises: [].} =
+        store: Store, td: TimerDispatcher): ConnectorAdapter {.raises: [].} =
     result = new ConnectorAdapter
-    result.init(name, isMultiPort, targetIp, targetPort, store)
+    result.init(name, isMultiPort, targetIp, targetPort, store,td)
     trace "Initialized", name
 
 
@@ -192,7 +208,7 @@ method start(self: ConnectorAdapter){.raises: [].} =
     {.cast(raises: []).}:
         procCall start(Adapter(self))
         trace "starting"
-        self.connectingFut = newAsyncEvent()
+        self.connectingEv = newAsyncEvent()
         self.readLoopFut = self.readloop()
         asyncSpawn self.readLoopFut
 
@@ -205,6 +221,7 @@ proc stop*(self: ConnectorAdapter) =
         trace "stopping"
         self.stopped = true
         if not isNil(self.socket): self.socket.close()
+        self.td.unregister(self.td_id)
         if not isNil(self.readLoopFut): cancelSoon self.readLoopFut
         if not isNil(self.writeLoopFut): cancelSoon self.writeLoopFut
         asyncSpawn breakCycle()

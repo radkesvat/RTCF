@@ -1,12 +1,13 @@
 import chronos, chronos/transports/ipnet, chronos/osdefs
 import adapters/[connection, mux]
 import tunnel, tunnels/[port, tcp]
-import  shared
+import  shared, timerdispatcher
 from globals import nil
 
 logScope:
     topic = "Iran LeftSide"
 
+var tdisp:TimerDispatcher
 
 proc startTcpListener(threadID: int) {.async: (raises: []).} =
     {.cast(gcsafe).}:
@@ -23,7 +24,7 @@ proc startTcpListener(threadID: int) {.async: (raises: []).} =
                 let address = transp.remoteAddress()
                 trace "Got connection", form = address
                 block spawn:
-                    var con_adapter = newConnectionAdapter(socket = transp, store = publicStore)
+                    var con_adapter = newConnectionAdapter(socket = transp, store = publicStore,td = tdisp)
                     var port_tunnel = newPortTunnel(multiport = globals.multi_port, writeport = globals.listen_port)
                     var tcp_tunnel = newTcpTunnel(store = publicStore, fakeupload_ratio = globals.noise_ratio.int)
                     var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
@@ -67,6 +68,8 @@ proc logs(){.async.} =
 
 proc run*(thread: int) {.async.} =
     await sleepAsync(200.milliseconds)
+    tdisp = TimerDispatcher()
+    discard tdisp.start(globals.timeout_check_interval.seconds)
     # if globals.accept_udp:
     #     info "Mode Iran (Tcp + Udp)"
     # else:
