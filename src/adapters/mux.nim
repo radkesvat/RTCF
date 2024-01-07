@@ -154,7 +154,6 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
         try:
             if sv.isNil:
                 {.cast(raises: []), gcsafe.}:
-                    echo "desttroy ",cid
                     var copy: DualChan
                     safeAccess:
                         copy = globalTable[cid]

@@ -27,7 +27,7 @@ type
 
 const
     bufferSize = 4093
-    timeOut = 20
+    timeOut = 180
     firstReadTimeout = 3
 
 proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.socket
@@ -136,7 +136,6 @@ proc init(self: ConnectionAdapter, name: string, socket: StreamTransport, store:
     proc checkalive() =
         if not self.stopped:
             if self.lastUpdate + timeOut.seconds < Moment.now():
-                echo "ok"
                 signal(self, both, close)
 
     self.td_id = td.register(checkalive)
