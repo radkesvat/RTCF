@@ -185,6 +185,7 @@ proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpA
     proc checkalive() =
         if not self.stopped:
             if self.lastUpdate + timeOut.seconds < Moment.now():
+                echo "ok"
                 signal(self, both, close)
 
     self.td_id = td.register(checkalive)
