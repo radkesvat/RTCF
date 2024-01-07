@@ -37,7 +37,7 @@ type
 
 const
     bufferSize = 4093
-    timeOut = 20
+    timeOut = 30
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
 
