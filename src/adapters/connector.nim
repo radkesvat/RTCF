@@ -172,6 +172,12 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
 
 
+proc checkalive(obj:Tunnel) =
+    assert obj != nil
+    var self = ConnectorAdapter(obj)
+    if not self.stopped:
+        if self.lastUpdate + timeOut.seconds < Moment.now():
+            signal(self, both, close)
 
 proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpAddress, targetPort: Port, store: Store, td: TimerDispatcher){.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
@@ -182,12 +188,8 @@ proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpA
     self.lastUpdate = Moment.now()
     self.td = td
     self.firstread = true
-    proc checkalive() =
-        if not self.stopped:
-            if self.lastUpdate + timeOut.seconds < Moment.now():
-                signal(self, both, close)
 
-    self.td_id = td.register(checkalive)
+    self.td_id = td.register(self,checkalive)
 
 
 proc newConnectorAdapter*(name: string = "ConnectorAdapter", isMultiPort: bool, targetIp: IpAddress, targetPort: Port,

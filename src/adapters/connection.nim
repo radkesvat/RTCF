@@ -28,6 +28,7 @@ type
 const
     bufferSize = 4093
     timeOut = 180
+    writeTimeOut = 2
     firstReadTimeout = 3
 
 proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.socket
@@ -57,7 +58,7 @@ proc readloop(self: ConnectionAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
-            if sv.len != await socket.write(sv.buf, sv.len):
+            if sv.len != await socket.write(sv.buf, sv.len).wait(writeTimeOut.seconds):
                 raise newAsyncStreamIncompleteError()
 
         except [CancelledError, FlowError, AsyncTimeoutError, TransportError, AsyncChannelError, AsyncStreamError]:
@@ -124,7 +125,12 @@ proc writeloop(self: ConnectionAdapter){.async.} =
             quit(1)
 
 
-
+proc checkalive(obj:Tunnel) =
+    assert obj != nil
+    var self = ConnectionAdapter(obj)
+    if not self.stopped:
+        if self.lastUpdate + timeOut.seconds < Moment.now():
+            signal(self, both, close)
 
 proc init(self: ConnectionAdapter, name: string, socket: StreamTransport, store: Store, td: TimerDispatcher){.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
@@ -133,12 +139,8 @@ proc init(self: ConnectionAdapter, name: string, socket: StreamTransport, store:
     self.lastUpdate = Moment.now()
     self.td = td
     self.firstread = true
-    proc checkalive() =
-        if not self.stopped:
-            if self.lastUpdate + timeOut.seconds < Moment.now():
-                signal(self, both, close)
 
-    self.td_id = td.register(checkalive)
+    self.td_id = td.register(self,checkalive)
 
 
 proc newConnectionAdapter*(name: string = "ConnectionAdapter", socket: StreamTransport, store: Store, td: TimerDispatcher): ConnectionAdapter {.raises: [].} =
