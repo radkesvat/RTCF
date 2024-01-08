@@ -7,7 +7,7 @@ from globals import nil
 logScope:
     topic = "Iran LeftSide"
 
-var tdisp:TimerDispatcher
+var tdisp{.threadvar.}:TimerDispatcher
 
 proc startTcpListener(threadID: int) {.async: (raises: []).} =
     {.cast(gcsafe).}:

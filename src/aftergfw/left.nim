@@ -6,7 +6,7 @@ from globals import nil
 logScope:
     topic = "Kharej LeftSide"
 
-var tdisp :TimerDispatcher
+var tdisp{.threadvar.} :TimerDispatcher
 
 
 proc startCoreConnector(threadID: int) {.async.} =

@@ -30,7 +30,9 @@ proc start*(self: TimerDispatcher, delay: Duration){.async: (raises: []).} =
 
             for (k, v) in self.handles.pairs:
                 funcs.add v
-            for v in funcs: v.cb(v.obj)
+            
+                    
+            for v in funcs: {.cast(gcsafe).}: v.cb(v.obj)
 
         try:
             await sleepAsync(delay)
