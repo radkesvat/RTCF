@@ -7,7 +7,7 @@ import checksums/sha1
 logScope:
     topic = "Setup"
 
-const version = "0.8"
+const version = "1.0"
 
 
 type RunMode*{.pure.} = enum
@@ -27,6 +27,7 @@ var connection_age*: uint = 600 # secs
 var connection_rewind*: uint = 4 # secs
 var max_idle_timeout*: int = 500 #secs
 var udp_max_idle_time*: uint = 12000 #secs
+var timeout_check_interval* = 30
 
 var prallel_cons*: uint = 8
 

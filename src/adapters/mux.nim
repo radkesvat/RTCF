@@ -86,7 +86,7 @@ proc closePacket(self: MuxAdapetr, cid: Cid): StringView =
     var sv = self.store.pop()
     sv.reserve(2)
     sv.write(0.uint16); sv.shiftl sizeof Cid
-    sv.write(cid.Cid)
+    sv.write(cid)
     return sv
 
 proc stop*(self: MuxAdapetr, sendclose: bool = true) =
@@ -102,7 +102,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
             if sc:
                 await fchan.send(closePacket(self, cid))
-            await fchan.send(nil, true)
+            await fchan.send(nil, hasThreadSupport)
 
     if not self.stopped:
         trace "stopping"
@@ -289,12 +289,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                             globalTable[cid].first.open()
                             globalTable[cid].second.open()
                         trace "data is written to created channel", cid = cid
-                        var fut = self.handleCid(cid)
-                        self.handles.add fut
-                        fut.callback = proc(udata: pointer) =
-                            let index = self.handles.find fut
-                            if index != -1: self.handles.del index
-                        asyncSpawn fut
+                        self.register(cid)
                         await globalTable[cid].second.send move data
                         self.masterChannel.sendSync cid
                     of sendclose:
