@@ -21,7 +21,10 @@ type
         socketr: WSSession
         store: Store
         onClose: CloseCb
+        discardReadFut:Future[void]
 
+const writeTimeOut = 500.milliseconds
+const pingInterval = 60.seconds
 
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
@@ -32,16 +35,28 @@ proc stop*(self: WebsocketAdapter) =
     if not self.stopped:
         trace "stopping"
         self.stopped = true
+        self.discardReadFut.cancelSoon()
         asyncSpawn self.socketr.close()
         asyncSpawn self.socketw.close()
         if not isNil(self.onClose): self.onClose()
 
+
+
+proc discardRead(self: WebsocketAdapter){.async.}=
+    var buf = allocShared(20)
+    defer:
+        deallocShared buf
+    try:
+        while not self.stopped: discard self.socketw.recv(buf,20)
+    except :
+        discard
+        
 proc keepAlive(self: WebsocketAdapter){.async.} =
     while not self.stopped:
         try:
-            await sleepAsync(15.seconds)
-            await self.socketw.ping(@[1.byte, 2.byte, 3.byte])
-            await self.socketr.ping(@[1.byte, 2.byte, 3.byte])
+            await sleepAsync(pingInterval)
+            await self.socketw.ping(@[1.byte])
+            await self.socketr.ping(@[1.byte])
         except:
             error "Failed to ping socket"
             self.stop()
@@ -49,13 +64,12 @@ proc keepAlive(self: WebsocketAdapter){.async.} =
 
 
 proc init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSSession, store: Store, onClose: CloseCb) {.raises: [].} =
+    procCall init(Adapter(self), name, hsize = 0)
     self.socketr = socketr
     self.socketw = socketw
     self.store = store
     self.onClose = onClose
-    procCall init(Adapter(self), name, hsize = 0)
-
-
+    self.discardReadFut = discardRead(self)
 
 proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession, socketw: WSSession, store: Store,
         onClose: CloseCb): WebsocketAdapter {.raises: [].} =
@@ -67,7 +81,7 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         rp.bytes(byteseq):
-            await self.socketw.send(byteseq, Binary)
+            await self.socketw.send(byteseq, Binary).wait(writeTimeOut)
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
         self.stop; raise e
