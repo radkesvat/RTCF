@@ -97,7 +97,7 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
     doAssert tident != nil, "connector adapter could not locate TransportIdentTunnel! it is required"
     self.protocol = if tident.isTcp: Tcp else: Udp
 
-    if self.isMultiPort:
+    if self.isMultiPort: 
         var (port_tunnel, _) = self.findByType(PortTunnel, right)
         doAssert port_tunnel != nil, "connector adapter could not locate PortTunnel! it is required"
         self.targetPort = port_tunnel.getReadPort()
@@ -115,7 +115,7 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
                 return true
             except CatchableError as e:
                 error "could not connect TCP to the core! ", name = e.name, msg = e.msg
-                if i != 4: notice "retrying ...", tries = i
+                if i != 4: notice "retrying ...", tries = i; await sleepAsync((i+1)*50.milliseconds)
                 else: error "give up connecting to core", tries = i; return false
             finally:
                 self.connecting = false
