@@ -255,9 +255,9 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             if self.location == AfterGfw and not self.firstReadDone:
                 self.firstReadDone = true
                 if cid == 0: resetAllCons()
-                while globalTableHas(0):
-                    notice "waiting for table reset..."
-                    await sleepAsync(200)
+                # while globalTableHas(0):
+                #     notice "waiting for table reset..."
+                #     await sleepAsync(200)
 
 
 
