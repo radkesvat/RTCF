@@ -28,7 +28,7 @@ const pingInterval = 60.seconds
 
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
-        await sleepAsync(2.seconds)
+        await sleepAsync(5.seconds)
         self.signal(both, breakthrough)
 
     if not self.stopped:

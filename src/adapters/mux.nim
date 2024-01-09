@@ -37,6 +37,7 @@ type
         masterChannel: AsyncChannel[Cid]
         readChanFut: Future[StringView]
         writeChanFut: Future[void]
+        firstReadDone: bool
 
 
 const
@@ -45,7 +46,7 @@ const
     SizeHeaderLen = 2
     MuxHeaderLen = CidHeaderLen + SizeHeaderLen
     ConnectionChanFixedSizeW = 1
-    ConnectionChanFixedSizeR = 2048 # 16 megabytes of buffering (per con)
+    ConnectionChanFixedSizeR = 3000 # * 40 (per con)
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -57,6 +58,8 @@ when hasThreadSupport:
     initLock globalLock
 else:
     var globalCounter: Cid
+
+var lastMaxCidRead: Cid = 0
 
 var muxSaveQueue: AsyncChannel[tuple[c: Cid, d: StringView]]
 
@@ -140,8 +143,8 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
 
         except CancelledError as e:
             trace "HandleCid Canceled [Read]", msg = e.name, cid = cid
-            if self.location == AfterGfw:
-                discard globalTable[cid].second.send(closePacket(self, cid))
+            # if self.location == AfterGfw:
+            #     discard globalTable[cid].second.send(closePacket(self, cid))
 
             notice "saving ", cid = cid
             muxSaveQueue.sendSync (cid, sv)
@@ -167,13 +170,13 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 trace "Sending data from", cid = cid
                 await procCall write(Tunnel(self), move sv)
 
-        except [CancelledError, AsyncStreamError, TransportError,AsyncTimeoutError, FlowError, WebSocketError]:
+        except [CancelledError, AsyncStreamError, TransportError, AsyncTimeoutError, FlowError, WebSocketError]:
             var e = getCurrentException()
             error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
 
             # no need to reuse non-nil sv because write have to
-            if self.location == AfterGfw:
-                discard globalTable[cid].second.send(closePacket(self, cid))
+            # if self.location == AfterGfw:
+            #     discard globalTable[cid].second.send(closePacket(self, cid))
             notice "saving ", cid = cid
             muxSaveQueue.sendSync (cid, sv)
 
@@ -194,7 +197,7 @@ proc register(self: MuxAdapetr, cid: Cid, firstdata: StringView = nil) =
     asyncSpawn fut
 
 proc restore(self: MuxAdapetr) =
-    while muxSaveQueue.dataLeft() > 0:
+    while muxSaveQueue.dataLeft() > 0 and not self.stopped:
         try:
             var (cid, data) = muxSaveQueue.recvSync()
             notice "Restored", cid = cid
@@ -217,7 +220,17 @@ proc acceptcidloop(self: MuxAdapetr) {.async.} =
 proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
     #read data from right adapetr, send it to the right chan
     var data: StringView = nil
-    # assert not self.stopped
+
+    proc resetAllCons() = #maybe i find a better way of doing this in the future
+        safeAccess:
+            for i in 0 .. Cid.high.int:
+                if not isNil(globalTable[i].second):
+                    try:
+                        discard globalTable[i].second.trySend(closePacket(self, i.Cid))
+                    except:
+                        discard
+
+
     try:
         while not self.stopped:
             #reads exactly MuxHeaderLen size
@@ -237,6 +250,14 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     rse
                 else:
                     sv.shiftl MuxHeaderLen; sv
+
+
+            if not self.firstReadDone:
+                self.firstReadDone = true
+                if cid == 0: resetAllCons()
+                while globalTableHas(0):
+                    notice "waiting for table reset..."
+                    await sleepAsync(10)
 
 
 
