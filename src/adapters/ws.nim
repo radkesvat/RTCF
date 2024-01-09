@@ -30,7 +30,6 @@ proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
         await sleepAsync(2.seconds)
         self.signal(both, breakthrough)
-        asyncSpawn breakCycle()
 
     if not self.stopped:
         trace "stopping"
@@ -39,6 +38,7 @@ proc stop*(self: WebsocketAdapter) =
         asyncSpawn self.socketr.close()
         asyncSpawn self.socketw.close()
         if not isNil(self.onClose): self.onClose()
+        discard breakCycle()
 
 
 

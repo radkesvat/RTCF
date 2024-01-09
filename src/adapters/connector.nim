@@ -1,6 +1,6 @@
-import tunnel,  store, timerdispatcher
+import tunnel, store, timerdispatcher
 import chronos/transports/stream
-import tunnels/[transportident,port]
+import tunnels/[transportident, port]
 
 
 logScope:
@@ -41,7 +41,7 @@ const
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
 
-template stillAlive(){.dirty.}= self.lastUpdate = Moment.now()
+template stillAlive(){.dirty.} = self.lastUpdate = Moment.now()
 
 proc writeloop(self: ConnectorAdapter){.async.} =
     #read data from socket, write to chain
@@ -61,7 +61,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
                 trace "Writeloop read", bytes = actual
             sv.setLen(actual)
 
-        except [CancelledError, TransportError, AsyncError,AsyncChannelError]:
+        except [CancelledError, TransportError, AsyncError, AsyncChannelError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Read]", msg = e.name
             self.store.reuse sv
@@ -78,7 +78,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
 
             await procCall write(Tunnel(self), move sv)
 
-        except [CancelledError, FlowError, AsyncError,AsyncChannelError]:
+        except [CancelledError, FlowError, AsyncError, AsyncChannelError]:
             var e = getCurrentException()
             trace "Writeloop Cancel [Write]", msg = e.name
             if sv != nil: self.store.reuse sv
@@ -97,7 +97,7 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
     doAssert tident != nil, "connector adapter could not locate TransportIdentTunnel! it is required"
     self.protocol = if tident.isTcp: Tcp else: Udp
 
-    if self.isMultiPort: 
+    if self.isMultiPort:
         var (port_tunnel, _) = self.findByType(PortTunnel, right)
         doAssert port_tunnel != nil, "connector adapter could not locate PortTunnel! it is required"
         self.staticTargetPort = port_tunnel.getReadPort()
@@ -115,8 +115,10 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
                 return true
             except CatchableError as e:
                 error "could not connect TCP to the core! ", name = e.name, msg = e.msg
-                if i != 4: notice "retrying ...", tries = i; await sleepAsync((i+1)*50.milliseconds)
+                if i != 4: notice "retrying ...", tries = i
                 else: error "give up connecting to core", tries = i; return false
+
+                try: await sleepAsync((i+1)*50.milliseconds) except: discard
             finally:
                 self.connecting = false
     else:
@@ -132,7 +134,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
         try:
             sv = await procCall read(Tunnel(self), 1)
             trace "Readloop Read", bytes = sv.len
-        except [CancelledError, FlowError,AsyncChannelError]:
+        except [CancelledError, FlowError, AsyncChannelError]:
             var e = getCurrentException()
             warn "Readloop Cancel [Read]", msg = e.name
             if not self.stopped: signal(self, both, close)
@@ -145,7 +147,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
         if not self.stopped and self.socket == nil:
             if self.connecting:
                 await self.connectingEv.wait()
-            elif await connect(self):discard
+            elif await connect(self): discard
             else:
                 self.store.reuse move sv
                 if not self.stopped: signal(self, both, close)
@@ -159,7 +161,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
                 raise newAsyncStreamIncompleteError()
 
 
-        except [CancelledError, FlowError, TransportError,AsyncChannelError, AsyncStreamError]:
+        except [CancelledError, FlowError, TransportError, AsyncChannelError, AsyncStreamError]:
             var e = getCurrentException()
             warn "Readloop Cancel [Write]", msg = e.name
             if not self.stopped: signal(self, both, close)
@@ -172,7 +174,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
 
 
-proc checkalive(obj:Tunnel) =
+proc checkalive(obj: Tunnel) =
     assert obj != nil
     var self = ConnectorAdapter(obj)
     if not self.stopped:
@@ -189,13 +191,13 @@ proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpA
     self.td = td
     self.firstread = true
 
-    self.td_id = td.register(self,checkalive)
+    self.td_id = td.register(self, checkalive)
 
 
 proc newConnectorAdapter*(name: string = "ConnectorAdapter", isMultiPort: bool, targetIp: IpAddress, staticTargetPort: Port,
         store: Store, td: TimerDispatcher): ConnectorAdapter {.raises: [].} =
     result = new ConnectorAdapter
-    result.init(name, isMultiPort, targetIp, staticTargetPort, store,td)
+    result.init(name, isMultiPort, targetIp, staticTargetPort, store, td)
     trace "Initialized", name
 
 
