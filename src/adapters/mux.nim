@@ -134,9 +134,9 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 if sv.isNil: raise newException(AsyncChannelError, "")
             else:
                 sv = first_data; first_data = nil
-        except [AsyncChannelError,AsyncTimeoutError]:
+        except AsyncChannelError as e:
             #read from closed channel, close will be sent,
-            trace "HandleCid closed [Read]"
+            trace "HandleCid closed [Read]", msg = e.name, cid = cid
 
         except CancelledError as e:
             trace "HandleCid Canceled [Read]", msg = e.name, cid = cid
@@ -167,7 +167,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 trace "Sending data from", cid = cid
                 await procCall write(Tunnel(self), move sv)
 
-        except [CancelledError, AsyncStreamError, TransportError, FlowError, WebSocketError]:
+        except [CancelledError, AsyncStreamError, TransportError,AsyncTimeoutError, FlowError, WebSocketError]:
             var e = getCurrentException()
             error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
 
