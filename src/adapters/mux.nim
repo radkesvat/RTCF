@@ -134,9 +134,9 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 if sv.isNil: raise newException(AsyncChannelError, "")
             else:
                 sv = first_data; first_data = nil
-        except AsyncChannelError as e:
+        except [AsyncChannelError,AsyncTimeoutError]:
             #read from closed channel, close will be sent,
-            trace "HandleCid closed [Read]", msg = e.name, cid = cid
+            trace "HandleCid closed [Read]"
 
         except CancelledError as e:
             trace "HandleCid Canceled [Read]", msg = e.name, cid = cid
