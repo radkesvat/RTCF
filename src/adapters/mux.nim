@@ -257,7 +257,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 if cid == 0: resetAllCons()
                 while globalTableHas(0):
                     notice "waiting for table reset..."
-                    await sleepAsync(10)
+                    await sleepAsync(200)
 
 
 
