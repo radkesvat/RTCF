@@ -252,7 +252,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     sv.shiftl MuxHeaderLen; sv
 
 
-            if not self.firstReadDone:
+            if self.location == AfterGfw and not self.firstReadDone:
                 self.firstReadDone = true
                 if cid == 0: resetAllCons()
                 while globalTableHas(0):
