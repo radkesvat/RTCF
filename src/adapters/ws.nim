@@ -23,7 +23,7 @@ type
         onClose: CloseCb
         discardReadFut:Future[void]
 
-const writeTimeOut = 500.milliseconds
+const writeTimeOut = 700.milliseconds
 const pingInterval = 60.seconds
 
 proc stop*(self: WebsocketAdapter) =
