@@ -102,6 +102,7 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
         doAssert port_tunnel != nil, "connector adapter could not locate PortTunnel! it is required"
         self.staticTargetPort = port_tunnel.getReadPort()
     self.connecting = true
+    defer: self.connecting = false
     if self.protocol == Tcp:
         var target = initTAddress(self.targetIp, self.staticTargetPort)
         for i in 0 .. 4:
@@ -119,8 +120,7 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
                 else: error "give up connecting to core", tries = i; return false
 
                 try: await sleepAsync((i+1)*50.milliseconds) except: discard
-            finally:
-                self.connecting = false
+   
     else:
         quit(1)
 
