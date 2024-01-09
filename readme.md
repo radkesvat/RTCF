@@ -53,6 +53,13 @@ cat /proc/cpuinfo
 
 
 # نحوه استفاده
+روش اول : اسکریپت:
+```
+bash <(curl -fsSL https://raw.githubusercontent.com/Ptechgithub/RTCF/main/scripts/install.sh)
+```
+![17](https://github.com/Ptechgithub/configs/blob/main/media/17.jpg?raw=true)
+
+روش دوم:
 
 اول باید برنامه رو دانلود کنید ؛ اگه نسخه مالتی ترد میخواید با این دستور
 
