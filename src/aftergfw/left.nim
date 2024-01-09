@@ -17,8 +17,8 @@ proc startCoreConnector(threadID: int) {.async.} =
             var targetip = parseIpAddress(globals.next_route_addr)
             block spawn:
                 var con_adapter = newConnectorAdapter(store = publicStore, ismultiport = globals.multi_port, targetIp = targetip,
-                targetPort = Port(globals.next_route_port),td = tdisp)
-                var port_tunnel = newPortTunnel(multiport = globals.multi_port, writeport = 0.Port)
+                staticTargetPort = Port(globals.next_route_port),td = tdisp)
+                var port_tunnel = newPortTunnel(multiport = globals.multi_port)
                 var tident_tunnel = newTransportIdentTunnel()
                 var mux_adapter = newMuxAdapetr(cid = cid, master = masterChannel, store = publicStore, loc = AfterGfw)
                 con_adapter.chain(port_tunnel).chain(tident_tunnel).chain(mux_adapter)

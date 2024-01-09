@@ -26,7 +26,7 @@ type
         protocol: Protocol
         isMultiPort: bool
         targetIp: IpAddress
-        targetPort: Port
+        staticTargetPort: Port
         connecting: bool
         connectingEv: AsyncEvent
         lastUpdate: Moment
@@ -37,7 +37,7 @@ type
 
 const
     bufferSize = 4093
-    timeOut = 200
+    timeOut = 200.seconds
 
 proc getRawSocket*(self: ConnectorAdapter): StreamTransport {.inline.} = self.socket
 
@@ -100,10 +100,10 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
     if self.isMultiPort: 
         var (port_tunnel, _) = self.findByType(PortTunnel, right)
         doAssert port_tunnel != nil, "connector adapter could not locate PortTunnel! it is required"
-        self.targetPort = port_tunnel.getReadPort()
+        self.staticTargetPort = port_tunnel.getReadPort()
     self.connecting = true
     if self.protocol == Tcp:
-        var target = initTAddress(self.targetIp, self.targetPort)
+        var target = initTAddress(self.targetIp, self.staticTargetPort)
         for i in 0 .. 4:
             try:
                 var flags = {SocketFlags.TcpNoDelay, SocketFlags.ReuseAddr}
@@ -176,15 +176,15 @@ proc checkalive(obj:Tunnel) =
     assert obj != nil
     var self = ConnectorAdapter(obj)
     if not self.stopped:
-        if self.lastUpdate + timeOut.seconds < Moment.now():
+        if self.lastUpdate + timeOut < Moment.now():
             signal(self, both, close)
 
-proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpAddress, targetPort: Port, store: Store, td: TimerDispatcher){.raises: [].} =
+proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpAddress, staticTargetPort: Port, store: Store, td: TimerDispatcher){.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
     self.store = store
     self.isMultiPort = isMultiPort
     self.targetIp = targetIp
-    self.targetPort = targetPort
+    self.staticTargetPort = staticTargetPort
     self.lastUpdate = Moment.now()
     self.td = td
     self.firstread = true
@@ -192,10 +192,10 @@ proc init(self: ConnectorAdapter, name: string, isMultiPort: bool, targetIp: IpA
     self.td_id = td.register(self,checkalive)
 
 
-proc newConnectorAdapter*(name: string = "ConnectorAdapter", isMultiPort: bool, targetIp: IpAddress, targetPort: Port,
+proc newConnectorAdapter*(name: string = "ConnectorAdapter", isMultiPort: bool, targetIp: IpAddress, staticTargetPort: Port,
         store: Store, td: TimerDispatcher): ConnectorAdapter {.raises: [].} =
     result = new ConnectorAdapter
-    result.init(name, isMultiPort, targetIp, targetPort, store,td)
+    result.init(name, isMultiPort, targetIp, staticTargetPort, store,td)
     trace "Initialized", name
 
 

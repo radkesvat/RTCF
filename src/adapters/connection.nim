@@ -27,9 +27,9 @@ type
 
 const
     bufferSize = 4093
-    timeOut = 180
-    writeTimeOut = 2
-    firstReadTimeout = 3
+    timeOut = 180.seconds
+    writeTimeOut = 2.seconds
+    firstReadTimeout = 3.seconds
 
 proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.socket
 template stillAlive(){.dirty.} = self.lastUpdate = Moment.now()
@@ -58,7 +58,7 @@ proc readloop(self: ConnectionAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
-            if sv.len != await socket.write(sv.buf, sv.len).wait(writeTimeOut.seconds):
+            if sv.len != await socket.write(sv.buf, sv.len).wait(writeTimeOut):
                 raise newAsyncStreamIncompleteError()
 
         except [CancelledError, FlowError, AsyncTimeoutError, TransportError, AsyncChannelError, AsyncStreamError]:
@@ -86,7 +86,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
             sv.reserve(bufferSize)
 
             var actual = await socket.readOnce(sv.buf(), bufferSize).wait(
-                if self.firstread: self.firstread = false; firstReadTimeout.seconds else: InfiniteDuration
+                if self.firstread: self.firstread = false; firstReadTimeout else: InfiniteDuration
                 )
 
             if actual == 0:
@@ -129,7 +129,7 @@ proc checkalive(obj:Tunnel) =
     assert obj != nil
     var self = ConnectionAdapter(obj)
     if not self.stopped:
-        if self.lastUpdate + timeOut.seconds < Moment.now():
+        if self.lastUpdate + timeOut < Moment.now():
             signal(self, both, close)
 
 proc init(self: ConnectionAdapter, name: string, socket: StreamTransport, store: Store, td: TimerDispatcher){.raises: [].} =
