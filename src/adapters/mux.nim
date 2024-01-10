@@ -29,7 +29,7 @@ type
 
 
     MuxAdapetr* = ref object of Adapter
-        restoreFut:Future[void]
+        restoreFut: Future[void]
         acceptConnectionFut: Future[void]
         readloopFut: Future[void]
         selectedCon: tuple[cid: Cid, dcp: DualChanPtr]
@@ -62,7 +62,7 @@ else:
 
 var lastMaxCidRead: Cid = 0
 
-var muxSaveQueue: AsyncChannel[tuple[c: Cid, d: StringView]]
+var muxSaveQueue: AsyncQueue[tuple[c: Cid, d: StringView]]
 
 
 
@@ -108,6 +108,12 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
                 await fchan.send(closePacket(self, cid))
             await fchan.send(nil, hasThreadSupport)
 
+    proc stopLoops(){.async.} =
+        if not isNil(self.restoreFut): await cancelAndWait(self.restoreFut)
+        if not isNil(self.acceptConnectionFut): await cancelAndWait(self.acceptConnectionFut)
+        if not isNil(self.readloopFut): await cancelAndWait(self.readloopFut)
+        self.handles.apply do(x: Future[void]): cancelSoon x
+
     if not self.stopped:
         trace "stopping"
         self.stopped = true
@@ -120,10 +126,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
                 asyncSpawn doClose(copy.dcp.first, copy.dcp.second,
                 copy.cid, self.store, sendclose)
 
-        if not isNil(self.restoreFut): cancelSoon(self.restoreFut)
-        if not isNil(self.acceptConnectionFut): cancelSoon(self.acceptConnectionFut)
-        if not isNil(self.readloopFut): cancelSoon(self.readloopFut)
-        self.handles.apply do(x: Future[void]): cancelSoon x
+        asyncSpawn stopLoops()
 
 
 
@@ -149,7 +152,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             #     discard globalTable[cid].second.send(closePacket(self, cid))
 
             notice "saving ", cid = cid
-            muxSaveQueue.sendSync (cid, sv)
+            discard muxSaveQueue.put (cid, sv)
 
             return
         except CatchableError as e:
@@ -180,7 +183,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             # if self.location == AfterGfw:
             #     discard globalTable[cid].second.send(closePacket(self, cid))
             notice "saving ", cid = cid
-            muxSaveQueue.sendSync (cid, sv)
+            discard muxSaveQueue.put (cid, sv)
 
             if not self.stopped: signal(self, both, close)
             return
@@ -198,10 +201,10 @@ proc register(self: MuxAdapetr, cid: Cid, firstdata: StringView = nil) =
         if index != -1: self.handles.del index
     asyncSpawn fut
 
-proc restoreLoop(self: MuxAdapetr)  {.async.}=
+proc restoreLoop(self: MuxAdapetr) {.async.} =
     while not self.stopped:
         try:
-            var (cid, data) = await muxSaveQueue.recv()
+            var (cid, data) = await muxSaveQueue.get()
             notice "Restored", cid = cid
             self.register(cid, data)
         except:
@@ -524,8 +527,7 @@ proc staticInit() =
     trace "Allocate globalTable", size = total_size
     static: doAssert sizeof(typeof(globalTable[][0])) <= 16, "roye google chromo sefid nakon plz !"
 
-    muxSaveQueue = newAsyncChannel[tuple[c: Cid, d: StringView]]()
-    muxSaveQueue.open()
+    muxSaveQueue = newAsyncQueue[tuple[c: Cid, d: StringView]]()
 
     trace "Initialized"
 
