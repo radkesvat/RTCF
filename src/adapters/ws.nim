@@ -22,6 +22,7 @@ type
         store: Store
         onClose: CloseCb
         discardReadFut:Future[void]
+        keepAliveFut:Future[void]
 
 const writeTimeOut = 700.milliseconds
 const pingInterval = 60.seconds
@@ -29,6 +30,7 @@ const pingInterval = 60.seconds
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
         await self.discardReadFut.cancelAndWait()
+        await self.keepAliveFut.cancelAndWait()
         await self.socketr.close()
         await self.socketw.close()
         await sleepAsync(5.seconds)
@@ -54,9 +56,10 @@ proc discardRead(self: WebsocketAdapter){.async.}=
 proc keepAlive(self: WebsocketAdapter){.async.} =
     while not self.stopped:
         try:
-            await sleepAsync(pingInterval)
             await self.socketw.ping(@[1.byte])
             await self.socketr.ping(@[1.byte])
+            await sleepAsync(pingInterval)
+
         except:
             error "Failed to ping socket"
             self.stop()
@@ -115,7 +118,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 proc start(self: WebsocketAdapter) =
     {.cast(raises: []).}:
         trace "starting"
-        asyncSpawn keepAlive(self)
+        self.keepAliveFut =  keepAlive(self)
 
 
 method signal*(self: WebsocketAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
