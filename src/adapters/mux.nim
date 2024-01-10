@@ -180,6 +180,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             error "HandleCid TimedOut [Write] ", msg = e.name, cid = cid
             if not self.stopped: signal(self, both, close)
 
+            notice "saving ", cid = cid
             if not self.restoreFut.finished():
                 self.restoreFut.addCallback proc(udata: pointer){.gcsafe.} =
                     discard muxSaveQueue.put (cid, nil)
@@ -274,9 +275,9 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     sv.shiftl MuxHeaderLen; sv
 
 
-            if self.location == AfterGfw and not self.firstReadDone:
-                self.firstReadDone = true
-                if cid == 0: resetAllCons()
+            # if self.location == AfterGfw and not self.firstReadDone:
+            #     self.firstReadDone = true
+            #     if cid == 0: resetAllCons()
                 # while globalTableHas(0):
                 #     notice "waiting for table reset..."
                 #     await sleepAsync(200)
@@ -337,10 +338,11 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         self.masterChannel.sendSync cid
                     of sendclose:
                         if size > 0:
+                            if self.location == BeforeGfw:
+                            trace "sending close for", cid = cid
+                            await procCall write(Tunnel(self), closePacket(self, cid))
+
                             self.store.reuse move data
-                            # trace "sending close for", cid = cid
-                            # # echo "close-back:  ",cid
-                            # await procCall write(Tunnel(self), closePacket(self, cid))
                         else:
                             self.store.reuse move data
                     of nothing:
