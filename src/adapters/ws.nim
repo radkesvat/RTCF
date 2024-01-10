@@ -84,7 +84,12 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         rp.bytes(byteseq):
-            await self.socketw.send(byteseq, Binary).wait(writeTimeOut)
+            var timeout = sleepAsync(writeTimeOut)
+            var task = self.socketw.send(byteseq, Binary)
+            if (await race(task, timeout)) == timeout:
+                await task
+                raise newException(AsyncTimeoutError,"write timed out")
+
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
         self.stop; raise e

@@ -173,16 +173,28 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                     return
             else:
                 trace "Sending data from", cid = cid
-                await procCall write(Tunnel(self), move sv)
+                await procCall write(Tunnel(self),  sv)
 
-        except [CancelledError, AsyncStreamError, TransportError, AsyncTimeoutError, FlowError, WebSocketError]:
+        except AsyncTimeoutError as e:
+            if not self.stopped: signal(self, both, close)
+            error "HandleCid TimedOut [Write] ", msg = e.name, cid = cid
+            if not self.stopped: signal(self, both, close)
+
+            if not self.restoreFut.finished():
+                self.restoreFut.addCallback proc(udata: pointer){.gcsafe.} =
+                    discard muxSaveQueue.put (cid, nil)
+            else:
+                discard muxSaveQueue.put (cid, nil)
+            return
+
+        except [CancelledError, AsyncStreamError, TransportError, FlowError, WebSocketError]:
             var e = getCurrentException()
             error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
+            if not self.stopped: signal(self, both, close)
 
             # no need to reuse non-nil sv because write have to
             # if self.location == AfterGfw:
             #     discard globalTable[cid].second.send(closePacket(self, cid))
-            if not self.stopped: signal(self, both, close)
 
             notice "saving ", cid = cid
             if not self.restoreFut.finished():
