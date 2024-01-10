@@ -87,6 +87,7 @@ proc globalTableHas(id: Cid): bool =
 
 
 proc closePacket(self: MuxAdapetr, cid: Cid): StringView =
+    echo "making close for ", cid
     var sv = self.store.pop()
     sv.reserve(2)
     sv.write(0.uint16); sv.shiftl sizeof Cid
@@ -106,6 +107,8 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
             if sc:
                 await fchan.send(closePacket(self, cid))
+            echo "closing ", cid
+
             await fchan.send(nil, hasThreadSupport)
 
     proc stopLoops(){.async.} =
@@ -178,7 +181,6 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
         except AsyncTimeoutError as e:
             if not self.stopped: signal(self, both, close)
             error "HandleCid TimedOut [Write] ", msg = e.name, cid = cid
-            if not self.stopped: signal(self, both, close)
 
             notice "saving ", cid = cid
             if not self.restoreFut.finished():
