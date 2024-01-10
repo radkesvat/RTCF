@@ -339,8 +339,8 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                     of sendclose:
                         if size > 0:
                             if self.location == BeforeGfw:
-                            trace "sending close for", cid = cid
-                            await procCall write(Tunnel(self), closePacket(self, cid))
+                                trace "sending close for", cid = cid
+                                await procCall write(Tunnel(self), closePacket(self, cid))
 
                             self.store.reuse move data
                         else:
