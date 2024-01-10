@@ -182,10 +182,15 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             # no need to reuse non-nil sv because write have to
             # if self.location == AfterGfw:
             #     discard globalTable[cid].second.send(closePacket(self, cid))
-            notice "saving ", cid = cid
-            discard muxSaveQueue.put (cid, sv)
-
             if not self.stopped: signal(self, both, close)
+
+            notice "saving ", cid = cid
+            if not self.restoreFut.finished():
+                self.restoreFut.addCallback proc(udata: pointer){.gcsafe.} =
+                    discard muxSaveQueue.put (cid, sv)
+            else:
+                discard muxSaveQueue.put (cid, sv)
+
             return
         except CatchableError as e:
             error "HandleCid error [Write]", name = e.name, msg = e.msg
