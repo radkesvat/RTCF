@@ -2,13 +2,19 @@ import chronos, chronos/timer, threading/channels
 
 
 
-var s = newSeqOfCap[int64](cap = 100000)
-s.setLen 100000
-for i in 0..<100000:
-    s[i] = Moment.now().epochNanoSeconds()
+proc fut():Future[int]{.async.}=
+    await sleepAsync(5000)
+    return 28
+    
+var futo = fut()
+proc test(i:int){.async.} =
+    await sleepAsync(7000)
+    echo $(await futo)
+     
 
-for i in 0..<100000:
-    for x in i+1..<100000:
-        if s[i] == s[x]:
-            echo "FOUND ",$s[i]," == ",$s[x]
-echo "end"
+for i in 0..10: asyncSpawn test(i)
+
+
+
+
+runForever()

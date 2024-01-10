@@ -216,20 +216,7 @@ proc chain*(`from`: Tunnel, `to`: Tunnel, chainfrom: Chains = default, chainto: 
     `to`
 
 
-# template next*(self: Tunnel): Tunnel = self.main.next
-# template prev*(self: Tunnel): Tunnel = self.main.prev
 
-
-# template nextAlt*(self: Tunnel): Tunnel = self.alt.next
-# template prevAlt*(self: Tunnel): Tunnel = self.alt.prev
-
-
-# template `name=`*(self: Tunnel, name: string) = self.name = name
-
-
-# proc init*(t: Tunnel,tag:TunnelTag = TunnelTag.None, name = "unnamed tunenl") =
-#     t.tag = tag
-#     t.name = name
 
 proc getNext*(self: Tunnel, chain: Chains = default): Tunnel {.inline, gcsafe.} = self.ties[chain].next
 proc getPrev*(self: Tunnel, chain: Chains = default): Tunnel {.inline, gcsafe.} = self.ties[chain].prev

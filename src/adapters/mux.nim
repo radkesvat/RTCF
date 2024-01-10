@@ -29,6 +29,7 @@ type
 
 
     MuxAdapetr* = ref object of Adapter
+        restoreFut:Future[void]
         acceptConnectionFut: Future[void]
         readloopFut: Future[void]
         selectedCon: tuple[cid: Cid, dcp: DualChanPtr]
@@ -119,6 +120,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
                 asyncSpawn doClose(copy.dcp.first, copy.dcp.second,
                 copy.cid, self.store, sendclose)
 
+        if not isNil(self.restoreFut): cancelSoon(self.restoreFut)
         if not isNil(self.acceptConnectionFut): cancelSoon(self.acceptConnectionFut)
         if not isNil(self.readloopFut): cancelSoon(self.readloopFut)
         self.handles.apply do(x: Future[void]): cancelSoon x
@@ -196,10 +198,10 @@ proc register(self: MuxAdapetr, cid: Cid, firstdata: StringView = nil) =
         if index != -1: self.handles.del index
     asyncSpawn fut
 
-proc restore(self: MuxAdapetr) =
-    while muxSaveQueue.dataLeft() > 0 and not self.stopped:
+proc restoreLoop(self: MuxAdapetr)  {.async.}=
+    while not self.stopped:
         try:
-            var (cid, data) = muxSaveQueue.recvSync()
+            var (cid, data) = await muxSaveQueue.recv()
             notice "Restored", cid = cid
             self.register(cid, data)
         except:
@@ -383,7 +385,7 @@ method start(self: MuxAdapetr){.raises: [].} =
                         self.masterChannel.sendSync cid
 
                     of Side.Right:
-                        self.restore()
+                        self.restoreFut = self.restoreLoop()
                         # right side, we accept cid signals
                         self.acceptConnectionFut = acceptcidloop(self)
                         # we also need to read from right adapter
@@ -402,7 +404,7 @@ method start(self: MuxAdapetr){.raises: [].} =
 
                     of Side.Right:
                         # right side, we create cid signals
-                        self.restore()
+                        self.restoreFut = self.restoreLoop()
                         # we also need to read from right adapter
                         # examine and forward data to left channel
                         self.readloopFut = readloop(self, create)

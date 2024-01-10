@@ -168,7 +168,9 @@ method start(self: ConnectionAdapter){.raises: [].} =
 
 proc stop*(self: ConnectionAdapter) =
     proc breakCycle(){.async.} =
-        await sleepAsync(2.seconds)
+        if not isNil(self.readLoopFut): await self.readLoopFut.cancelAndWait()
+        if not isNil(self.writeLoopFut): await self.writeLoopFut.cancelAndWait()
+        await sleepAsync(5.seconds)
         self.signal(both, breakthrough)
 
     if not self.stopped:
@@ -177,8 +179,6 @@ proc stop*(self: ConnectionAdapter) =
         if not isNil(self.socket): self.socket.close()
         self.td.unregister(self.td_id)
 
-        if not isNil(self.readLoopFut): cancelSoon self.readLoopFut
-        if not isNil(self.writeLoopFut): cancelSoon self.writeLoopFut
         asyncSpawn breakCycle()
 
 method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =

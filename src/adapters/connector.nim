@@ -27,8 +27,7 @@ type
         isMultiPort: bool
         targetIp: IpAddress
         staticTargetPort: Port
-        connecting: bool
-        connectingEv: AsyncEvent
+        connecting: Future[bool]
         lastUpdate: Moment
         td: TimerDispatcher
         td_id: int64
@@ -101,8 +100,6 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
         var (port_tunnel, _) = self.findByType(PortTunnel, right)
         doAssert port_tunnel != nil, "connector adapter could not locate PortTunnel! it is required"
         self.staticTargetPort = port_tunnel.getReadPort()
-    self.connecting = true
-    defer: self.connecting = false
     if self.protocol == Tcp:
         var target = initTAddress(self.targetIp, self.staticTargetPort)
         for i in 0 .. 4:
@@ -110,17 +107,16 @@ proc connect(self: ConnectorAdapter): Future[bool] {.async.} =
                 var flags = {SocketFlags.TcpNoDelay, SocketFlags.ReuseAddr}
                 self.socket = await connect(target, flags = flags)
                 trace "connected to the target core"
-                self.connectingEv.fire()
                 self.writeLoopFut = self.writeloop()
                 asyncSpawn self.writeLoopFut
                 return true
             except CatchableError as e:
+                if e of CancelledError: return false
                 error "could not connect TCP to the core! ", name = e.name, msg = e.msg
                 if i != 4: notice "retrying ...", tries = i
                 else: error "give up connecting to core", tries = i; return false
-
                 try: await sleepAsync((i+1)*50.milliseconds) except: discard
-   
+
     else:
         quit(1)
 
@@ -145,10 +141,10 @@ proc readloop(self: ConnectorAdapter){.async.} =
 
 
         if not self.stopped and self.socket == nil:
-            if self.connecting:
-                await self.connectingEv.wait()
-            elif await connect(self): discard
-            else:
+
+            if isNil(self.connecting): self.connecting = connect(self)
+
+            if not await self.connecting:
                 self.store.reuse move sv
                 if not self.stopped: signal(self, both, close)
                 return
@@ -212,13 +208,15 @@ method start(self: ConnectorAdapter){.raises: [].} =
     {.cast(raises: []).}:
         procCall start(Adapter(self))
         trace "starting"
-        self.connectingEv = newAsyncEvent()
         self.readLoopFut = self.readloop()
         asyncSpawn self.readLoopFut
 
 proc stop*(self: ConnectorAdapter) =
     proc breakCycle(){.async.} =
-        await sleepAsync(2.seconds)
+        if not isNil(self.connecting): await self.connecting.cancelAndWait()
+        if not isNil(self.readLoopFut): await self.readLoopFut.cancelAndWait()
+        if not isNil(self.writeLoopFut): await self.writeLoopFut.cancelAndWait()
+        await sleepAsync(5.seconds)
         self.signal(both, breakthrough)
 
     if not self.stopped:
@@ -226,8 +224,6 @@ proc stop*(self: ConnectorAdapter) =
         self.stopped = true
         if not isNil(self.socket): self.socket.close()
         self.td.unregister(self.td_id)
-        if not isNil(self.readLoopFut): cancelSoon self.readLoopFut
-        if not isNil(self.writeLoopFut): cancelSoon self.writeLoopFut
         asyncSpawn breakCycle()
 
 method signal*(self: ConnectorAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
