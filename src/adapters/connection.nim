@@ -185,7 +185,6 @@ proc stop*(self: ConnectionAdapter) =
 
 method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
     if sig == close or sig == stop: 
-        echo "sig stop ", self.name
         self.stop()
 
     if sig == breakthrough: doAssert self.stopped, "break through signal while still running?"
