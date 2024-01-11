@@ -24,7 +24,7 @@ type
         discardReadFut: Future[void]
         keepAliveFut: Future[void]
 
-const writeTimeOut = 350.milliseconds
+const writeTimeOut = 35000.milliseconds
 const pingInterval = 60.seconds
 
 
