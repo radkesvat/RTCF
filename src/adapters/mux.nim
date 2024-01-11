@@ -263,9 +263,11 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
         while not self.stopped:
             #reads exactly MuxHeaderLen size
             data = await procCall read(Tunnel(self), MuxHeaderLen)
-            var size: uint16 = 0
             var cid: Cid = 0
             copyMem(addr cid, data.buf, sizeof(cid))
+            var size = data.len - sizeof(Cid)
+
+
             # copyMem(addr size, data.buf.offset sizeof(cid), sizeof(size))
             
             # data = if size > 0:
