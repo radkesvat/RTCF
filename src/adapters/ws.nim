@@ -1,5 +1,5 @@
-import tunnel, store, websock/websock
-
+import tunnel, store, deques, websock/websock
+import stew/endians2
 
 
 logScope:
@@ -21,18 +21,55 @@ type
         socketr: WSSession
         store: Store
         onClose: CloseCb
-        discardReadFut:Future[void]
-        keepAliveFut:Future[void]
+        discardReadFut: Future[void]
+        keepAliveFut: Future[void]
 
 const writeTimeOut = 350.milliseconds
 const pingInterval = 60.seconds
 
+
+var readQueue = initDeque[StringView](initialSize = 4096)
+
+
+proc prepareCloseBody(code: StatusCodes, reason: string): seq[byte] =
+    result = reason.toBytes
+    if ord(code) > 999:
+        result = @(ord(code).uint16.toBytesBE()) & result
+
+
+proc closeRead(socket: WSSession,store:Store){.async.} =
+    if socket.readyState != ReadyState.Open:
+        return
+    await socket.send(prepareCloseBody(StatusFulfilled, ""), opcode = Opcode.Close)
+    # read frames until closed
+    try:
+        while socket.readyState != ReadyState.Closed:
+            var frame = await socket.readFrame()
+            if frame.isNil: break
+            var sv = store.pop()
+            sv.reserve(frame.remainder.int)
+            let read = await frame.read(socket.stream.reader, sv.buf, frame.remainder.int)
+            if read == 0:
+                store.reuse sv
+                break
+            echo "saved 1 frame ", sv.len
+            readQueue.addLast sv
+
+    except CancelledError as exc:
+        raise exc
+    except CatchableError as exc:
+        discard # most likely EOF
+
+
+
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
-        if not isNil(self.discardReadFut):await self.discardReadFut.cancelAndWait()
-        if not isNil(self.keepAliveFut):await self.keepAliveFut.cancelAndWait()
-        await self.socketr.close()
+        if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
+        if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
         await self.socketw.close()
+
+        await self.socketr.closeRead(self.store)
+
         await sleepAsync(5.seconds)
         self.signal(both, breakthrough)
 
@@ -44,15 +81,18 @@ proc stop*(self: WebsocketAdapter) =
 
 
 
-proc discardRead(self: WebsocketAdapter){.async.}=
+
+proc discardRead(self: WebsocketAdapter){.async.} =
     var buf = allocShared(20)
     defer:
         deallocShared buf
     try:
-        while not self.stopped: discard self.socketw.recv(buf,20)
-    except :
+        while not self.stopped: discard self.socketw.recv(buf, 20)
+    except:
         discard
-        
+
+
+
 proc keepAlive(self: WebsocketAdapter){.async.} =
     while not self.stopped:
         try:
@@ -81,6 +121,7 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
     trace "Initialized", name
 
 
+
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         rp.bytes(byteseq):
@@ -88,7 +129,7 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
             var timeout = sleepAsync(writeTimeOut)
             if (await race(task, timeout)) == timeout:
                 await task
-                raise newException(AsyncTimeoutError,"write timed out")
+                raise newException(AsyncTimeoutError, "write timed out")
 
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
@@ -102,19 +143,26 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     try:
         trace "asking for ", bytes = bytes
         sv.reserve bytes
-        var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
 
-        trace "received", bytes = bytesread
+        while true:
+            if readQueue.len > 0:
+                self.store.reuse sv
+                return readQueue.popFirst()
 
-        if bytesread == bytes:
-            return sv
-        else:
-            if bytesread == 0:
-                trace "received 0 bytes from ws socket"
-                raise FlowCloseError()
+            var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
+            trace "received", bytes = bytesread
+            if bytesread == bytes:
+                readQueue.addLast sv
             else:
-                fatal "read bytes less than wanted !"
-                quit(1)
+                if bytesread == 0:
+                    trace "received 0 bytes from ws socket"
+                    raise FlowCloseError()
+                else:
+                    fatal "read bytes less than wanted !"
+                    quit(1)
+
+
+
 
     except CatchableError as e:
         self.store.reuse move sv
@@ -123,7 +171,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 proc start(self: WebsocketAdapter) =
     {.cast(raises: []).}:
         trace "starting"
-        self.keepAliveFut =  keepAlive(self)
+        self.keepAliveFut = keepAlive(self)
 
 
 method signal*(self: WebsocketAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =
