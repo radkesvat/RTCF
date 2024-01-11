@@ -472,6 +472,8 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
 
 
     except CatchableError as e:
+        echo "write close: ",cid
+
         self.store.reuse(rp)
         self.stop(); raise e
 
@@ -524,6 +526,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
 
     except CatchableError as e:
+        echo "read close: ",cid
         self.stop(); raise e
 
 
