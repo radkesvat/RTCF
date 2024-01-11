@@ -146,13 +146,13 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 
         while true:
             if readQueue.len > 0:
-                self.store.reuse sv
+                if not sv.isNil: self.store.reuse sv
                 return readQueue.popFirst()
 
             var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
             trace "received", bytes = bytesread
             if bytesread == bytes:
-                readQueue.addLast sv
+                readQueue.addLast move sv
             else:
                 if bytesread == 0:
                     trace "received 0 bytes from ws socket"
