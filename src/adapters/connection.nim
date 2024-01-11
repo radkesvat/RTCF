@@ -26,7 +26,7 @@ type
         firstread: bool
 
 const
-    bufferSize = 4093
+    bufferSize = 4090
     timeOut = 180.seconds
     writeTimeOut = 2.seconds
     firstReadTimeout = 3.seconds

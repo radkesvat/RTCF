@@ -147,16 +147,11 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
             if readQueue.len > 0:
                 if not sv.isNil: self.store.reuse sv
                 return readQueue.popFirst()
-
             # var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
-
-
             var frame = await self.socketr.readFrame()
             if frame.isNil:raise FlowCloseError()
             sv.reserve(frame.remainder.int)
             let bytesread = await frame.read(self.socketr.stream.reader, sv.buf, frame.remainder.int)
-
-
             trace "received", bytes = bytesread
             if bytesread >= bytes:
                 readQueue.addLast move sv
@@ -167,9 +162,6 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                 else:
                     fatal "read bytes less than wanted !"
                     quit(1)
-
-
-
 
     except CatchableError as e:
         self.store.reuse move sv
