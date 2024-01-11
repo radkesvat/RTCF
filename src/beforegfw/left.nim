@@ -8,7 +8,7 @@ logScope:
     topic = "Iran LeftSide"
 
 var tdisp{.threadvar.}:TimerDispatcher
-
+var testid = 0
 proc startTcpListener(threadID: int) {.async: (raises: []).} =
     {.cast(gcsafe).}:
        
@@ -24,12 +24,13 @@ proc startTcpListener(threadID: int) {.async: (raises: []).} =
                 let address = transp.remoteAddress()
                 trace "Got connection", form = address
                 block spawn:
-                    var con_adapter = newConnectionAdapter(socket = transp, store = publicStore,td = tdisp)
+                    var con_adapter = newConnectionAdapter(name = $testid,socket = transp, store = publicStore,td = tdisp)
                     var port_tunnel = newPortTunnel(multiport = globals.multi_port, writeport = globals.listen_port)
                     var tcp_tunnel = newTcpTunnel(store = publicStore, fakeupload_ratio = globals.noise_ratio.int)
                     var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
                     con_adapter.chain(port_tunnel).chain(tcp_tunnel).chain(mux_adapter)
                     con_adapter.signal(both, start)
+                    inc testid
 
             except CatchableError as e:
                 error "handle client connection error", name = e.name, msg = e.msg

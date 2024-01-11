@@ -60,7 +60,7 @@ proc readloop(self: ConnectionAdapter){.async.} =
             trace "Readloop write to socket", count = sv.len
             var written = await socket.write(sv.buf, sv.len)
             if sv.len != written:
-                echo "fail was " ,$sv.len, " and " , " ",$written
+                echo "fail was " ,$sv.len, " and " , " ",$written," ", self.name
                 raise newAsyncStreamIncompleteError()
 
         except [CancelledError, FlowError, AsyncTimeoutError, TransportError, AsyncChannelError, AsyncStreamError]:
@@ -92,7 +92,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
                 )
 
             if actual == 0:
-                echo "Writeloop read 0 !";
+                echo "Writeloop read 0 !", self.name
                 self.store.reuse move sv
                 if not self.stopped: signal(self, both, close)
                 break
@@ -102,7 +102,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
 
         except [CancelledError, TransportError, AsyncTimeoutError, AsyncChannelError]:
             var e = getCurrentException()
-            echo "Writeloop Cancel [Read]", e.name
+            echo "Writeloop Cancel [Read] ", e.name," ", self.name
             self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
@@ -184,7 +184,9 @@ proc stop*(self: ConnectionAdapter) =
         asyncSpawn breakCycle()
 
 method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
-    if sig == close or sig == stop: self.stop()
+    if sig == close or sig == stop: 
+        echo "sig stop ", self.name
+        self.stop()
 
     if sig == breakthrough: doAssert self.stopped, "break through signal while still running?"
 
