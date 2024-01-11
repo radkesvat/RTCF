@@ -153,7 +153,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                 if not sv.isNil: self.store.reuse sv
                 return readQueue.popFirst()
             # var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
-            var frame = await self.socketr.readFrame()
+            var frame = await self.socketr.readFrame(self.socketr.extensions)
             if frame.isNil: raise FlowCloseError()
             sv.reserve(frame.remainder.int)
             let bytesread = await frame.read(self.socketr.stream.reader, sv.buf, frame.remainder.int)

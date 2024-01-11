@@ -344,7 +344,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         await globalTable[cid].second.send move data
                         self.masterChannel.sendSync cid
                     of sendclose:
-                        if data.len > sizeof(Cid):
+                        if size > 0:
                             if self.location == BeforeGfw:
                                 trace "sending close for", cid = cid
                                 await procCall write(Tunnel(self), closePacket(self, cid))
