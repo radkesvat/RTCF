@@ -37,12 +37,15 @@ proc prepareCloseBody(code: StatusCodes, reason: string): seq[byte] =
         result = @(ord(code).uint16.toBytesBE()) & result
 
 
-proc closeRead(socket: WSSession,store:Store){.async.} =
+proc closeRead(socket: WSSession, store: Store){.async.} =
     if socket.readyState != ReadyState.Open:
         return
-    await socket.send(prepareCloseBody(StatusFulfilled, ""), opcode = Opcode.Close)
     # read frames until closed
     try:
+        socket.readyState = ReadyState.Closing
+
+        await socket.send(prepareCloseBody(StatusFulfilled, ""), opcode = Opcode.Close)
+
         while socket.readyState != ReadyState.Closed:
             var frame = await socket.readFrame()
             if frame.isNil: break
@@ -149,7 +152,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                 return readQueue.popFirst()
             # var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
             var frame = await self.socketr.readFrame()
-            if frame.isNil:raise FlowCloseError()
+            if frame.isNil: raise FlowCloseError()
             sv.reserve(frame.remainder.int)
             let bytesread = await frame.read(self.socketr.stream.reader, sv.buf, frame.remainder.int)
             trace "received", bytes = bytesread
