@@ -177,6 +177,7 @@ proc stop*(self: ConnectionAdapter) =
 
     if not self.stopped:
         trace "stopping"
+        echo "stop ",self.name
         self.stopped = true
         if not isNil(self.socket): self.socket.close()
         self.td.unregister(self.td_id)
