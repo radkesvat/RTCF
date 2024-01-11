@@ -216,9 +216,9 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
 proc register(self: MuxAdapetr, cid: Cid, firstdata: StringView = nil) =
     var fut = self.handleCid(cid, firstdata)
     self.handles.add fut
-    fut.callback = proc(udata: pointer) =
-        let index = self.handles.find fut
-        if index != -1: self.handles.del index
+    # fut.callback = proc(udata: pointer) =
+    #     let index = self.handles.find fut
+    #     if index != -1: self.handles.del index
     asyncSpawn fut
 
 proc restoreLoop(self: MuxAdapetr) {.async.} =
@@ -340,9 +340,10 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         self.masterChannel.sendSync cid
                     of sendclose:
                         if size > 0:
-                            # if self.location == BeforeGfw:
-                            #     trace "sending close for", cid = cid
-                            #     await procCall write(Tunnel(self), closePacket(self, cid))
+                            if self.location == BeforeGfw:
+                                trace "sending close for", cid = cid
+                                await procCall write(Tunnel(self), closePacket(self, cid))
+                                await sleepAsync(20)
 
                             self.store.reuse move data
                         else:
