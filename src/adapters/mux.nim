@@ -267,7 +267,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             var size: uint16 = 0
             var cid: Cid = 0
             copyMem(addr cid, data.buf, sizeof(cid))
-            copyMem(addr size, data.buf.offset sizeof(cid), sizeof(size))
+            # copyMem(addr size, data.buf.offset sizeof(cid), sizeof(size))
             
             # data = if size > 0:
             #         var rse = await procCall read(Tunnel(self), size.int)
@@ -343,7 +343,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         await globalTable[cid].second.send move data
                         self.masterChannel.sendSync cid
                     of sendclose:
-                        if size > 0:
+                        if data.len > sizeof(Cid):
                             if self.location == BeforeGfw:
                                 trace "sending close for", cid = cid
                                 await procCall write(Tunnel(self), closePacket(self, cid))
@@ -468,8 +468,8 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
 
     try:
         var total_len = rp.len.uint16
-        rp.shiftl SizeHeaderLen
-        rp.write(total_len)
+        # rp.shiftl SizeHeaderLen
+        # rp.write(total_len)
         rp.shiftl CidHeaderLen
         rp.write(self.selectedCon.cid)
         self.writeChanFut = self.selectedCon.dcp.first.send(rp)
@@ -506,12 +506,13 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
         if self.selectedCon.dcp.isNil:
             raise newException(AsyncChannelError, message = "closed pipe")
 
-        var size: uint16 = 0
         var cid: uint16 = 0
         self.readChanFut = self.selectedCon.dcp.second.recv()
         var sv = await self.readChanFut
         copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
-        copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
+        var size = sv.len - sizeof(Cid)
+
+        # copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
 
         if self.selectedCon.cid != cid:
             fatal "cid mismatch!", c1 = self.selectedCon.cid, c2 = cid; quit(1)
