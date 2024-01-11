@@ -221,8 +221,8 @@ template sharedBuildSwitches(){.dirty.} =
         switch("passL", " -s")
         switch("debuginfo", "off")
         switch("passC", "-DNDEBUG")
-        switch("passC", "-flto")
-        switch("passL", "-flto")
+        # switch("passC", "-flto")
+        # switch("passL", "-flto")
 
         switch("obj_checks", "off")
         switch("field_checks", "off")
@@ -242,7 +242,7 @@ template sharedBuildSwitches(){.dirty.} =
         # switch("passL", " -static-libstdc++")
     else:
         switch("d", "debug")
-        switch("d", "chronicles_log_level=TRACE")
+        switch("d", "chronicles_log_level=INFO")
         switch("g")
         switch("d","debuginfo")
         switch("debugger", "native")

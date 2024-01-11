@@ -89,7 +89,7 @@ proc closePacket(self: MuxAdapetr, cid: Cid): StringView =
     echo "making close for ", cid
     var sv = self.store.pop()
     sv.reserve(2)
-    sv.write(0.uint16); sv.shiftl sizeof Cid
+    # sv.write(0.uint16); sv.shiftl sizeof Cid
     sv.write(cid)
     return sv
 

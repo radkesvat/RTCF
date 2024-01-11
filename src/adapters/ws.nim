@@ -133,6 +133,8 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
             if (await race(task, timeout)) == timeout:
                 await task
                 raise newException(AsyncTimeoutError, "write timed out")
+            else:
+                timeout.cancelSoon()
 
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
