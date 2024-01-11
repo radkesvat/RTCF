@@ -514,6 +514,9 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
         var size = sv.len - sizeof(Cid)
 
         # copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
+        if self.stopped:
+            self.store.reuse sv
+            raise newException(AsyncChannelError, message = "closed pipe")
 
         if self.selectedCon.cid != cid:
             fatal "cid mismatch!", c1 = self.selectedCon.cid, c2 = cid; quit(1)
@@ -526,10 +529,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
         
     
       
-        if self.stopped:
-            self.store.reuse sv
-            raise newException(AsyncChannelError, message = "closed pipe")
-
+        
       
         debug "read", bytes = size
 
