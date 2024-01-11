@@ -173,7 +173,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 proc start(self: WebsocketAdapter) =
     {.cast(raises: []).}:
         trace "starting"
-        self.keepAliveFut = keepAlive(self)
+        # self.keepAliveFut = keepAlive(self)
 
 
 method signal*(self: WebsocketAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =

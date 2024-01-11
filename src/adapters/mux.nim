@@ -526,16 +526,10 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
             self.store.reuse move sv
             self.stop(false)
             raise newException(CancelledError, message = "read close, size: " & $size)
-        
-    
-      
-        
-      
+            
         debug "read", bytes = size
 
-      
         return sv
-
 
     except CatchableError as e:
         echo "read close: ",testcid
