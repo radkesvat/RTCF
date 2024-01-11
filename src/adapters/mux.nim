@@ -353,7 +353,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
 
     except [CancelledError, AsyncChannelError,AsyncTimeoutError, WebSocketError, FlowError, TransportError]:
         var e = getCurrentException()
-        trace "Readloop canceled", name = e.name, msg = e.msg
+        warn "Readloop canceled", name = e.name, msg = e.msg
     except AsyncStreamError as e:
         error "Readloop canceled (when reading from ws)", name = e.name, msg = e.msg
     except CatchableError as e:
