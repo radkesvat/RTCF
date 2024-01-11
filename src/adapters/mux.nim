@@ -8,9 +8,9 @@ logScope:
 
 #     1    2    3    4    5    6    7
 # ----------------------------------
-#   cid    |   size  |
+#   cid    
 # ----------------------------------
-#         Mux       |
+#  Mux |
 # ----------------------------------
 
 
@@ -162,6 +162,8 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             error "HandleCid Unexpeceted Error, [Read]", name = e.name, msg = e.msg
             quit(1)
 
+
+
         try:
             if sv.isNil:
                 {.cast(raises: []), gcsafe.}:
@@ -178,7 +180,9 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 trace "Sending data from", cid = cid
                 await procCall write(Tunnel(self),  sv)
 
-        except AsyncTimeoutError as e:
+        except [AsyncTimeoutError ,CancelledError]:
+            var e = getCurrentException()
+
             if not self.stopped: signal(self, both, close)
             error "HandleCid TimedOut [Write] ", msg = e.name, cid = cid
 
@@ -190,7 +194,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                 discard muxSaveQueue.put (cid, nil)
             return
 
-        except [CancelledError, AsyncStreamError, TransportError, FlowError, WebSocketError]:
+        except [ AsyncStreamError, TransportError, FlowError, WebSocketError]:
             var e = getCurrentException()
             error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
             if not self.stopped: signal(self, both, close)
@@ -259,22 +263,22 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
     try:
         while not self.stopped:
             #reads exactly MuxHeaderLen size
-            var sv = await procCall read(Tunnel(self), MuxHeaderLen)
+            data = await procCall read(Tunnel(self), MuxHeaderLen)
             var size: uint16 = 0
             var cid: Cid = 0
-            copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
-            copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
-
-            data = if size > 0:
-                    var rse = await procCall read(Tunnel(self), size.int)
-                    sv.shiftl sizeof(size)
-                    rse.shiftl sizeof(size); copyMem(rse.buf, sv.buf, sizeof(size))
-                    sv.shiftl sizeof(cid)
-                    rse.shiftl sizeof(cid); copyMem(rse.buf, sv.buf, sizeof(cid))
-                    self.store.reuse move sv
-                    rse
-                else:
-                    sv.shiftl MuxHeaderLen; sv
+            copyMem(addr cid, data.buf, sizeof(cid))
+            copyMem(addr size, data.buf.offset sizeof(cid), sizeof(size))
+            
+            # data = if size > 0:
+            #         var rse = await procCall read(Tunnel(self), size.int)
+            #         sv.shiftl sizeof(size)
+            #         rse.shiftl sizeof(size); copyMem(rse.buf, sv.buf, sizeof(size))
+            #         sv.shiftl sizeof(cid)
+            #         rse.shiftl sizeof(cid); copyMem(rse.buf, sv.buf, sizeof(cid))
+            #         self.store.reuse move sv
+            #         rse
+            #     else:
+            #         sv.shiftl MuxHeaderLen; sv
 
 
             # if self.location == AfterGfw and not self.firstReadDone:
@@ -501,29 +505,33 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
         if self.selectedCon.dcp.isNil:
             raise newException(AsyncChannelError, message = "closed pipe")
+
         var size: uint16 = 0
         var cid: uint16 = 0
         self.readChanFut = self.selectedCon.dcp.second.recv()
         var sv = await self.readChanFut
-        assert sv != nil
         copyMem(addr cid, sv.buf, sizeof(cid)); sv.shiftr sizeof(cid)
         copyMem(addr size, sv.buf, sizeof(size)); sv.shiftr sizeof(size)
 
-        if self.stopped:
-            self.store.reuse sv
-            raise newException(AsyncChannelError, message = "closed pipe")
-
         if self.selectedCon.cid != cid:
             fatal "cid mismatch!", c1 = self.selectedCon.cid, c2 = cid; quit(1)
-
-        debug "read", bytes = size
 
         if size.int < bytes:
             trace "closing read channel.", size
             self.store.reuse move sv
             self.stop(false)
             raise newException(CancelledError, message = "read close, size: " & $size)
+        
+    
+      
+        if self.stopped:
+            self.store.reuse sv
+            raise newException(AsyncChannelError, message = "closed pipe")
 
+      
+        debug "read", bytes = size
+
+      
         return sv
 
 
