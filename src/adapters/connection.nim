@@ -92,7 +92,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
                 )
 
             if actual == 0:
-                trace "Writeloop read 0 !";
+                echo "Writeloop read 0 !";
                 self.store.reuse move sv
                 if not self.stopped: signal(self, both, close)
                 break
@@ -102,7 +102,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
 
         except [CancelledError, TransportError, AsyncTimeoutError, AsyncChannelError]:
             var e = getCurrentException()
-            trace "Writeloop Cancel [Read]", msg = e.name
+            echo "Writeloop Cancel [Read]", e.name
             self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
@@ -118,7 +118,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
 
         except [CancelledError, FlowError, AsyncChannelError]:
             var e = getCurrentException()
-            trace "Writeloop Cancel [Write]", msg = e.name
+            echo "Writeloop Cancel [Write]",  e.name
             if sv != nil: self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
