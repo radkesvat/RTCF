@@ -44,8 +44,7 @@ type
 const
     GlobalTableSize = int(Cid.high) + 1
     CidHeaderLen = 2
-    SizeHeaderLen = 2
-    MuxHeaderLen = CidHeaderLen + SizeHeaderLen
+    MuxHeaderLen = CidHeaderLen 
     ConnectionChanFixedSizeW = 1
     ConnectionChanFixedSizeR = 3000 # * 40 (per con)
 

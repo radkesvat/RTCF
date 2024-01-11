@@ -141,8 +141,7 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
 method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     var sv = self.store.pop()
     try:
-        trace "asking for ", bytes = bytes
-        sv.reserve bytes
+        # trace "asking for ", bytes = bytes
 
         while true:
             if readQueue.len > 0:
@@ -159,7 +158,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 
 
             trace "received", bytes = bytesread
-            if bytesread == bytes:
+            if bytesread >= bytes:
                 readQueue.addLast move sv
             else:
                 if bytesread == 0:
