@@ -58,7 +58,9 @@ proc readloop(self: ConnectionAdapter){.async.} =
 
         try:
             trace "Readloop write to socket", count = sv.len
-            if sv.len != await socket.write(sv.buf, sv.len).wait(writeTimeOut):
+            var written = await socket.write(sv.buf, sv.len).wait(writeTimeOut)
+            if sv.len != written:
+                echo "fail was " ,$sv.len, " and " , " ",$written
                 raise newAsyncStreamIncompleteError()
 
         except [CancelledError, FlowError, AsyncTimeoutError, TransportError, AsyncChannelError, AsyncStreamError]:
