@@ -447,7 +447,7 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
     if self.stopped: self.store.reuse rp; raise newException(AsyncChannelError, message = "closed pipe")
     debug "Write", size = rp.len
 
-
+    var testcid = self.selectedCon.cid
     when not defined(release):
         case self.location:
             of BeforeGfw:
@@ -472,7 +472,7 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
 
 
     except CatchableError as e:
-        echo "write close: ",cid
+        echo "write close: ",testcid
 
         self.store.reuse(rp)
         self.stop(); raise e
@@ -480,6 +480,7 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
 
 method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     if self.stopped: raise newException(AsyncChannelError, message = "closed pipe")
+    var testcid = self.selectedCon.cid
 
     when not defined(release):
         case self.location:
@@ -526,7 +527,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
 
     except CatchableError as e:
-        echo "read close: ",cid
+        echo "read close: ",testcid
         self.stop(); raise e
 
 
