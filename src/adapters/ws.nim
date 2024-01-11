@@ -29,8 +29,8 @@ const pingInterval = 60.seconds
 
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
-        await self.discardReadFut.cancelAndWait()
-        await self.keepAliveFut.cancelAndWait()
+        if not isNil(self.discardReadFut):await self.discardReadFut.cancelAndWait()
+        if not isNil(self.keepAliveFut):await self.keepAliveFut.cancelAndWait()
         await self.socketr.close()
         await self.socketw.close()
         await sleepAsync(5.seconds)
