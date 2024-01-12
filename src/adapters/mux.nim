@@ -248,6 +248,8 @@ proc acceptcidloop(self: MuxAdapetr) {.async.} =
 proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
     #read data from right adapetr, send it to the right chan
     var data: StringView = nil
+    var closeTracks = newSeqOfCap[Cid](25)
+
 
     proc resetAllCons() = #maybe i find a better way of doing this in the future
         safeAccess:
@@ -345,10 +347,12 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         self.masterChannel.sendSync cid
                     of sendclose:
                         if size > 0:
-                            # if self.location == BeforeGfw:
-                            #     trace "sending close for", cid = cid
-                            #     await procCall write(Tunnel(self), closePacket(self, cid))
-                            #     await sleepAsync(20)
+                            if  self.location == BeforeGfw and not closeTracks.contains(cid):
+                                closeTracks.add cid
+                                if closeTracks.len > 25:
+                                    closeTracks.del(0)
+                                trace "sending close for", cid = cid
+                                await procCall write(Tunnel(self), closePacket(self, cid))
 
                             self.store.reuse move data
                         else:
