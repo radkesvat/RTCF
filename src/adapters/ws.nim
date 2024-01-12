@@ -49,7 +49,7 @@ proc closeRead(socket: WSSession, store: Store){.async.} =
         while socket.readyState != ReadyState.Closed:
             var frame = await socket.readFrame()
             if frame.isNil: break
-            ws.binary = ws.frame.opcode == Opcode.Binary
+            socket.binary = frame.opcode == Opcode.Binary
             var sv = store.pop()
             sv.reserve(frame.remainder.int)
             let read = await frame.read(socket.stream.reader, sv.buf, frame.remainder.int)
@@ -156,9 +156,9 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
             # var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
             var frame = await self.socketr.readFrame(self.socketr.extensions)
             if frame.isNil:
-                assert ws.readyState == ReadyState.Closed
+                assert self.socketr.readyState == ReadyState.Closed
                 raise FlowCloseError()
-            ws.binary = ws.frame.opcode == Opcode.Binary
+            self.socketr.binary = frame.opcode == Opcode.Binary
             sv.reserve(frame.remainder.int)
             let bytesread = await frame.read(self.socketr.stream.reader, sv.buf, frame.remainder.int)
             trace "received", bytes = bytesread
