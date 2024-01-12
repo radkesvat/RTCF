@@ -8,7 +8,7 @@ logScope:
 
 #     1    2    3    4    5    6    7
 # ----------------------------------
-#   cid    
+#   cid
 # ----------------------------------
 #  Mux |
 # ----------------------------------
@@ -44,7 +44,7 @@ type
 const
     GlobalTableSize = int(Cid.high) + 1
     CidHeaderLen = 2
-    MuxHeaderLen = CidHeaderLen 
+    MuxHeaderLen = CidHeaderLen
     ConnectionChanFixedSizeW = 1
     ConnectionChanFixedSizeR = 3000 # * 40 (per con)
 
@@ -179,8 +179,8 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                     discard muxSaveQueue.put (cid, sv)
                     return
                 trace "Sending data from", cid = cid
-                await procCall write(Tunnel(self),  sv)
-        except  [AsyncStreamError, TransportError, FlowError, WebSocketError]:
+                await procCall write(Tunnel(self), sv)
+        except [AsyncStreamError, TransportError, FlowError, WebSocketError]:
             notice "saving ", cid = cid
             discard muxSaveQueue.put (cid, sv)
             return
@@ -208,17 +208,15 @@ proc register(self: MuxAdapetr, cid: Cid, firstdata: StringView = nil) =
 
 proc restoreLoop(self: MuxAdapetr) {.async.} =
     while not self.stopped:
-        try:
-            var (cid, data) = await muxSaveQueue.get()
-            if self.stopped: 
-                await muxSaveQueue.addFirst (cid, data)
-                return
 
-            notice "Restored", cid = cid
-            self.register(cid, data)
-        except:
-            var e = getCurrentException()
-            error "Restore error !", msg = e.name, msg = e.msg
+        var (cid, data) = await muxSaveQueue.get()
+        if self.stopped:
+            await muxSaveQueue.addFirst (cid, data)
+            return
+
+        notice "Restored", cid = cid
+        self.register(cid, data)
+
 
 proc acceptcidloop(self: MuxAdapetr) {.async.} =
     while not self.stopped:
@@ -257,7 +255,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
 
 
             # copyMem(addr size, data.buf.offset sizeof(cid), sizeof(size))
-            
+
             # data = if size > 0:
             #         var rse = await procCall read(Tunnel(self), size.int)
             #         sv.shiftl sizeof(size)
@@ -306,9 +304,10 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 else:
                     while globalTableHas(cid):
                         try:
-                            if not (globalTable[cid].second.trySend(data)):
-                                await sleepAsync(80)
-                                continue
+                            # if not (globalTable[cid].second.trySend(data)):
+                            #     await sleepAsync(80)
+                            #     continue
+                            await globalTable[cid].second.send(data)
 
                             data = nil; break operation
                         except AsyncChannelError as e:
@@ -333,7 +332,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         self.masterChannel.sendSync cid
                     of sendclose:
                         if size > 0:
-                            if  self.location == BeforeGfw and not closeTracks.contains(cid):
+                            if self.location == BeforeGfw and not closeTracks.contains(cid):
                                 closeTracks.add cid
                                 if closeTracks.len > 25:
                                     closeTracks.del(0)
@@ -347,7 +346,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         self.store.reuse move data
 
 
-    except [CancelledError, AsyncChannelError,AsyncTimeoutError, WebSocketError, FlowError, TransportError]:
+    except [CancelledError, AsyncChannelError, AsyncTimeoutError, WebSocketError, FlowError, TransportError]:
         var e = getCurrentException()
         warn "Readloop canceled", name = e.name, msg = e.msg
     except AsyncStreamError as e:
@@ -512,7 +511,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
             self.store.reuse move sv
             self.stop(false)
             raise newException(CancelledError, message = "read close, size: " & $size)
-            
+
         debug "read", bytes = size
 
         return sv
