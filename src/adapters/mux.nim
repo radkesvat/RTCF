@@ -304,10 +304,9 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 else:
                     while globalTableHas(cid):
                         try:
-                            # if not (globalTable[cid].second.trySend(data)):
-                            #     await sleepAsync(80)
-                            #     continue
-                            await globalTable[cid].second.send(data)
+                            if not (globalTable[cid].second.trySend(data)):
+                                await sleepAsync(80)
+                                continue
 
                             data = nil; break operation
                         except AsyncChannelError as e:
