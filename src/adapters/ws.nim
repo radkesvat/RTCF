@@ -260,7 +260,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
         self.store.reuse move sv
         self.stop()
         if not self.readCompleteEv.isSet():
-            self.writeCompleteEv.fire()
+            self.readCompleteEv.fire()
             await self.finished.wait()
         raise e
     finally:
