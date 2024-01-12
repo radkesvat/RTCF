@@ -114,7 +114,7 @@ proc stop*(self: WebsocketAdapter) =
         trace "stopping"
         self.stopped = true
         if not isNil(self.onClose): self.onClose()
-        discard breakCycle()
+        asyncSpawn breakCycle()
 
 
 
@@ -162,16 +162,15 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 
 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
-    try:
-        if self.stopped: raise FlowCloseError()
-        self.writeCompleteEv.clear()
+    if self.stopped: raise FlowCloseError()
 
+    try:
+        self.writeCompleteEv.clear()
         var size: uint16 = rp.len.uint16
         rp.shiftl 2
         rp.write(size)
         rp.bytes(byteseq):
             var task = self.socketw.send(byteseq, Binary)
-            task.addCallback proc(udata: pointer) = self.writeCompleteEv.fire()
             var timeout = sleepAsync(writeTimeOut)
             if (await race(task, timeout)) == timeout:
                 await task
@@ -187,6 +186,8 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
         self.stop; raise e
     finally:
         self.store.reuse rp
+        self.writeCompleteEv.fire()
+        
 
 
 method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
@@ -200,7 +201,6 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
         while true:
             if readQueue.len > 0:
                 if not sv.isNil: self.store.reuse sv
-                self.readCompleteEv.fire()
                 return readQueue.popFirst()
 
             var size_header_read = await self.socketr.recv(cast[ptr byte](addr size), 2)
@@ -241,6 +241,9 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     except CatchableError as e:
         self.store.reuse move sv
         self.stop; raise e
+    finally:
+        self.readCompleteEv.fire()
+
 
 proc start(self: WebsocketAdapter) =
     {.cast(raises: []).}:

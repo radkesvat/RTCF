@@ -83,7 +83,7 @@ proc reconnect(){.async.} =
             await disconnectEV.wait()
             if gfs:
                 info "Reconnecting in 3 secconds..."
-                await sleepAsync(3.seconds)
+                await sleepAsync(15.seconds)
             else:
                 gfs = true
             disconnectEV.clear()
