@@ -41,28 +41,43 @@ proc closeRead(socket: WSSession, store: Store){.async.} =
     if socket.readyState != ReadyState.Open:
         return
     # read frames until closed
+    var sv:StringView = nil
     try:
         socket.readyState = ReadyState.Closing
 
         await socket.send(prepareCloseBody(StatusFulfilled, ""), opcode = Opcode.Close)
 
         while socket.readyState != ReadyState.Closed:
-            var frame = await socket.readFrame()
-            if frame.isNil: break
-            socket.binary = frame.opcode == Opcode.Binary
-            var sv = store.pop()
-            sv.reserve(frame.remainder.int)
-            let read = await frame.read(socket.stream.reader, sv.buf, frame.remainder.int)
-            if read == 0:
-                store.reuse sv
-                break
-            echo "saved 1 frame ", sv.len
-            readQueue.addLast sv
+            var size: uint16 = 0
+
+            var size_header_read = await socket.recv(cast[ptr byte](addr size), 2)
+            if size_header_read != 2: raise FlowCloseError()
+            sv = store.pop()
+            sv.reserve size.int
+            var payload_size = await socket.recv(cast[ptr byte](sv.buf), size.int)
+            if payload_size == 0: raise FlowCloseError()
+
+            trace "received", bytes = payload_size
+            readQueue.addLast move sv
+
+            # var frame = await socket.readFrame()
+            # if frame.isNil: break
+            # socket.binary = frame.opcode == Opcode.Binary
+            # var sv = store.pop()
+            # sv.reserve(frame.remainder.int)
+            # let read = await frame.read(socket.stream.reader, sv.buf, frame.remainder.int)
+            # if read == 0:
+            #     store.reuse sv
+            #     break
+            # echo "saved 1 frame ", sv.len
+            # readQueue.addLast sv
 
     except CancelledError as exc:
         raise exc
     except CatchableError as exc:
         discard # most likely EOF
+    finally:
+        if not sv.isNil: store.reuse sv
 
 
 
@@ -128,9 +143,9 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
-        # var size: uint16 = rp.len.uint16
-        # rp.shiftl 2
-        # rp.write(size)
+        var size: uint16 = rp.len.uint16
+        rp.shiftl 2
+        rp.write(size)
         rp.bytes(byteseq):
             # var task = self.socketw.send(byteseq, Binary)
             # var timeout = sleepAsync(writeTimeOut)
@@ -152,48 +167,48 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     var sv = self.store.pop()
     var size: uint16 = 0
     try:
-        # trace "asking for ", bytes = bytes
+        trace "asking for ", bytes = bytes
 
-        # while true:
-        #     if readQueue.len > 0:
-        #         if not sv.isNil: self.store.reuse sv
-        #         return readQueue.popFirst()
-
-        #     var size_header_read = await self.socketr.recv(cast[ptr byte](addr size), 2)
-        #     if size_header_read != 2: raise FlowCloseError()
-        #     echo "size ", size
-
-        #     sv.reserve size.int
-        #     var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size.int)
-        #     if payload_size == 0: raise FlowCloseError()
-
-        #     trace "received", bytes = payload_size
-        #     readQueue.addLast move sv
         while true:
             if readQueue.len > 0:
                 if not sv.isNil: self.store.reuse sv
                 return readQueue.popFirst()
 
-            # var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
-            var frame = await self.socketr.readFrame(self.socketr.extensions)
-            if frame.isNil:
-                assert self.socketr.readyState == ReadyState.Closed
-                raise FlowCloseError()
-            
-            self.socketr.binary = frame.opcode == Opcode.Binary
-            sv.reserve(frame.remainder.int)
-            let bytesread = await frame.read(self.socketr.stream.reader, sv.buf, frame.remainder.int)
-            trace "received", bytes = bytesread
+            var size_header_read = await self.socketr.recv(cast[ptr byte](addr size), 2)
+            if size_header_read != 2: raise FlowCloseError()
+            echo "size ", size
 
-            if bytesread >= bytes:
-                readQueue.addLast move sv
-            else:
-                if bytesread == 0:
-                    trace "received 0 bytes from ws socket"
-                    raise FlowCloseError()
-                else:
-                    fatal "read bytes less than wanted !"
-                    quit(1)
+            sv.reserve size.int
+            var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size.int)
+            if payload_size == 0: raise FlowCloseError()
+
+            trace "received", bytes = payload_size
+            readQueue.addLast move sv
+        # while true:
+        #     if readQueue.len > 0:
+        #         if not sv.isNil: self.store.reuse sv
+        #         return readQueue.popFirst()
+
+        #     # var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
+        #     var frame = await self.socketr.readFrame(self.socketr.extensions)
+        #     if frame.isNil:
+        #         assert self.socketr.readyState == ReadyState.Closed
+        #         raise FlowCloseError()
+
+        #     self.socketr.binary = frame.opcode == Opcode.Binary
+        #     sv.reserve(frame.remainder.int)
+        #     let bytesread = await frame.read(self.socketr.stream.reader, sv.buf, frame.remainder.int)
+        #     trace "received", bytes = bytesread
+
+        #     if bytesread >= bytes:
+        #         readQueue.addLast move sv
+        #     else:
+        #         if bytesread == 0:
+        #             trace "received 0 bytes from ws socket"
+        #             raise FlowCloseError()
+        #         else:
+        #             fatal "read bytes less than wanted !"
+        #             quit(1)
 
     except CatchableError as e:
         self.store.reuse move sv
