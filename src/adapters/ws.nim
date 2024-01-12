@@ -23,7 +23,8 @@ type
         onClose: CloseCb
         discardReadFut: Future[void]
         keepAliveFut: Future[void]
-        readCompleteEv:AsyncEvent
+        readCompleteEv: AsyncEvent
+        writeCompleteEv: AsyncEvent
 
 const writeTimeOut = 30000.milliseconds
 const pingInterval = 60.seconds
@@ -42,7 +43,7 @@ proc closeRead(socket: WSSession, store: Store){.async.} =
     if socket.readyState != ReadyState.Open:
         return
     # read frames until closed
-    var sv:StringView = nil
+    var sv: StringView = nil
     try:
         socket.readyState = ReadyState.Closing
 
@@ -84,18 +85,21 @@ proc closeRead(socket: WSSession, store: Store){.async.} =
 
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
+        if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
+        await self.writeCompleteEv.wait()
         await self.readCompleteEv.wait()
         if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
-        if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
+        await sleepAsync(2.seconds)
 
 
-        # self.socketw.stream.close()
+        self.socketw.stream.close()
+        self.socketr.stream.close()
         # await self.socketr.close()
-        let cr = self.socketr.closeRead(self.store)
-        await self.socketw.close()
-        await cr
+        # let cr = self.socketr.closeRead(self.store)
+        # await self.socketw.close()
+        # await cr
 
-        await sleepAsync(5.seconds)
+        await sleepAsync(3.seconds)
         self.signal(both, breakthrough)
 
     if not self.stopped:
@@ -107,14 +111,14 @@ proc stop*(self: WebsocketAdapter) =
 
 
 
-proc discardRead(self: WebsocketAdapter){.async.} =
-    var buf = allocShared(20)
-    defer:
-        deallocShared buf
-    try:
-        while not self.stopped: discard self.socketw.recv(buf, 20)
-    except:
-        discard
+# proc discardRead(self: WebsocketAdapter){.async.} =
+#     var buf = allocShared(20)
+#     defer:
+#         deallocShared buf
+#     try:
+#         while not self.stopped: discard self.socketw.recv(buf, 20)
+#     except:
+#         discard
 
 
 
@@ -137,8 +141,9 @@ proc init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSS
     self.socketw = socketw
     self.store = store
     self.onClose = onClose
+    self.writeCompleteEv = newAsyncEvent()
     self.readCompleteEv = newAsyncEvent()
-    self.discardReadFut = discardRead(self)
+    # self.discardReadFut = discardRead(self)
 
 proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession, socketw: WSSession, store: Store,
         onClose: CloseCb): WebsocketAdapter {.raises: [].} =
@@ -151,18 +156,22 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         if self.stopped: raise FlowCloseError()
+        self.readCompleteEv.clear()
 
         var size: uint16 = rp.len.uint16
         rp.shiftl 2
         rp.write(size)
         rp.bytes(byteseq):
             var task = self.socketw.send(byteseq, Binary)
+            task.addCallback proc(udata: pointer) = self.readCompleteEv.fire()
             var timeout = sleepAsync(writeTimeOut)
             if (await race(task, timeout)) == timeout:
                 await task
                 raise newException(AsyncTimeoutError, "write timed out")
             else:
                 timeout.cancelSoon()
+
+
             # await self.socketw.send(byteseq, Binary).wait(writeTimeOut)
 
             trace "written bytes to ws socket", bytes = byteseq.len

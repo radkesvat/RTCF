@@ -109,10 +109,10 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
             await fchan.send(nil, hasThreadSupport)
 
     proc stopLoops(){.async.} =
+        self.handles.apply do(x: Future[void]): cancelSoon x
         if not isNil(self.restoreFut): await cancelAndWait(self.restoreFut)
         if not isNil(self.acceptConnectionFut): await cancelAndWait(self.acceptConnectionFut)
         if not isNil(self.readloopFut): await cancelAndWait(self.readloopFut)
-        self.handles.apply do(x: Future[void]): cancelSoon x
 
     if not self.stopped:
         trace "stopping"
