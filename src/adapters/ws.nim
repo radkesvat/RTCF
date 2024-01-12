@@ -26,7 +26,7 @@ type
         readCompleteEv: AsyncEvent
         writeCompleteEv: AsyncEvent
 
-const writeTimeOut = 30000.milliseconds
+const writeTimeOut = 300.milliseconds
 const pingInterval = 60.seconds
 
 
@@ -90,8 +90,6 @@ proc stop*(self: WebsocketAdapter) =
         await self.readCompleteEv.wait()
         if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
         await sleepAsync(2.seconds)
-
-
         self.socketw.stream.close()
         self.socketr.stream.close()
         # await self.socketr.close()

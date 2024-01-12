@@ -109,7 +109,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
             await fchan.send(nil, hasThreadSupport)
 
     proc stopLoops(){.async.} =
-        self.handles.apply do(x: Future[void]): cancelSoon x
+        # self.handles.apply do(x: Future[void]): cancelSoon x
         if not isNil(self.restoreFut): await cancelAndWait(self.restoreFut)
         if not isNil(self.acceptConnectionFut): await cancelAndWait(self.acceptConnectionFut)
         if not isNil(self.readloopFut): await cancelAndWait(self.readloopFut)
@@ -174,42 +174,24 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                     copy.second.close()
                     return
             else:
+                if self.stopped:
+                    notice "saving ", cid = cid
+                    discard muxSaveQueue.put (cid, sv)
+                    return
                 trace "Sending data from", cid = cid
                 await procCall write(Tunnel(self),  sv)
+        except  [AsyncStreamError, TransportError, FlowError, WebSocketError]:
+            notice "saving ", cid = cid
+            discard muxSaveQueue.put (cid, sv)
+            return
 
-        except [AsyncTimeoutError ,CancelledError]:
-            var e = getCurrentException()
-
+        except AsyncTimeoutError as e:
             if not self.stopped: signal(self, both, close)
             error "HandleCid TimedOut [Write] ", msg = e.name, cid = cid
-
             notice "saving ", cid = cid
-            if not  self.restoreFut.isNil():
-                if  not self.restoreFut.finished():
-                    self.restoreFut.addCallback proc(udata: pointer){.gcsafe.} =
-                        discard muxSaveQueue.put (cid, nil)
-                else:
-                    discard muxSaveQueue.put (cid, nil)
+            discard muxSaveQueue.put (cid, nil)
             return
 
-        except [ AsyncStreamError, TransportError, FlowError, WebSocketError]:
-            var e = getCurrentException()
-            error "HandleCid Canceled [Write] ", msg = e.name, cid = cid
-            if not self.stopped: signal(self, both, close)
-
-            # no need to reuse non-nil sv because write have to
-            # if self.location == AfterGfw:
-            #     discard globalTable[cid].second.send(closePacket(self, cid))
-
-            notice "saving ", cid = cid
-            if not  self.restoreFut.isNil():
-                if not self.restoreFut.finished():
-                    self.restoreFut.addCallback proc(udata: pointer){.gcsafe.} =
-                        discard muxSaveQueue.put (cid, sv)
-                else:
-                    discard muxSaveQueue.put (cid, sv)
-
-            return
         except CatchableError as e:
             error "HandleCid error [Write]", name = e.name, msg = e.msg
             quit(1)
