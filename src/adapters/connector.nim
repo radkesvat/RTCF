@@ -139,19 +139,20 @@ proc readloop(self: ConnectorAdapter){.async.} =
             error "Readloop Unexpected Error, [Read]", name = e.name, msg = e.msg
             quit(1)
 
-
-        if not self.stopped and self.socket == nil:
-
-            if isNil(self.connecting): self.connecting = connect(self)
-
-            if not await self.connecting:
-                self.store.reuse move sv
-                if not self.stopped: signal(self, both, close)
-                return
-
         try:
-            trace "Readloop write to socket", count = sv.len
-            if self.stopped: return
+
+            if not self.stopped and self.socket == nil:
+
+                if isNil(self.connecting): self.connecting = connect(self)
+
+                if not await self.connecting:
+                    self.store.reuse move sv
+                    if not self.stopped: signal(self, both, close)
+                    return
+
+                trace "Readloop write to socket", count = sv.len
+                if self.stopped: return
+                
 
             if sv.len != await self.socket.write(sv.buf, sv.len):
                 raise newAsyncStreamIncompleteError()
