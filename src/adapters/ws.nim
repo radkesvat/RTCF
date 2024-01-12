@@ -91,8 +91,9 @@ proc stop*(self: WebsocketAdapter) =
 
         # self.socketw.stream.close()
         # await self.socketr.close()
+        let cr = self.socketr.closeRead(self.store)
         await self.socketw.close()
-        await self.socketr.closeRead(self.store)
+        await cr
 
         await sleepAsync(5.seconds)
         self.signal(both, breakthrough)
