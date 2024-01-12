@@ -54,7 +54,6 @@ proc handle(request: HttpRequest) {.async.} =
                     proc() =
                         dec activeCons; if activeCons <= 0: setIsPeerConnected false
                 )
-                await sleepAsync(2000)
                 mux_adapter.chain(ws_adapter)
                 mux_adapter.signal(both, start)
                 sr = nil; sw = nil

@@ -129,7 +129,8 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         rp.shiftl 2
-        rp.write(rp.len.uint16)
+        var size: uint16 = rp.len.uint16
+        rp.write(size)
         rp.bytes(byteseq):
             # var task = self.socketw.send(byteseq, Binary)
             # var timeout = sleepAsync(writeTimeOut)
@@ -159,13 +160,13 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                 return readQueue.popFirst()
 
             var size = await self.socketr.recv(cast[ptr byte](addr size), sizeof(size))
-            if size == 0:raise FlowCloseError()
+            if size == 0: raise FlowCloseError()
 
             sv.reserve size
             var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size)
-            if payload_size == 0:raise FlowCloseError()
+            if payload_size == 0: raise FlowCloseError()
 
-            trace "received", bytes = size
+            trace "received", bytes = payload_size
             readQueue.addLast move sv
         # while true:
         #     if readQueue.len > 0:
