@@ -110,7 +110,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
     proc stopLoops(){.async.} =
         # self.handles.apply do(x: Future[void]): cancelSoon x
-        if not isNil(self.restoreFut): await cancelAndWait(self.restoreFut)
+        # if not isNil(self.restoreFut): await cancelAndWait(self.restoreFut)
         if not isNil(self.acceptConnectionFut): await cancelAndWait(self.acceptConnectionFut)
         if not isNil(self.readloopFut): await cancelAndWait(self.readloopFut)
 
@@ -150,7 +150,6 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             trace "HandleCid Canceled [Read]", msg = e.name, cid = cid
             # if self.location == AfterGfw:
             #     discard globalTable[cid].second.send(closePacket(self, cid))
-
             notice "saving ", cid = cid
             discard muxSaveQueue.put (cid, sv)
 
