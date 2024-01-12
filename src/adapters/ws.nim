@@ -71,7 +71,8 @@ proc stop*(self: WebsocketAdapter) =
         if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
         if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
         await self.socketw.close()
-        await self.socketr.closeRead(self.store)
+        await self.socketr.close()
+        # await self.socketr.closeRead(self.store)
 
         await sleepAsync(5.seconds)
         self.signal(both, breakthrough)
@@ -163,9 +164,8 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
             sv.reserve size
             var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size)
             if payload_size == 0:raise FlowCloseError()
-            sv.shiftr 2
 
-            trace "received", bytes = bytesread
+            trace "received", bytes = size
             readQueue.addLast move sv
         # while true:
         #     if readQueue.len > 0:
