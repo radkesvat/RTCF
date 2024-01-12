@@ -327,6 +327,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                             # channel is half closed ...
                             self.store.reuse move data
                             warn "read loop was about to write data to a half closed chanenl!", msg = e.msg, cid = cid
+                            # await sleepAsync(10)
                             break operation
                 if size == 0: self.store.reuse move data; break operation # dont do anything
 
@@ -344,10 +345,10 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                         self.masterChannel.sendSync cid
                     of sendclose:
                         if size > 0:
-                            if self.location == BeforeGfw:
-                                trace "sending close for", cid = cid
-                                await procCall write(Tunnel(self), closePacket(self, cid))
-                                await sleepAsync(20)
+                            # if self.location == BeforeGfw:
+                            #     trace "sending close for", cid = cid
+                            #     await procCall write(Tunnel(self), closePacket(self, cid))
+                            #     await sleepAsync(20)
 
                             self.store.reuse move data
                         else:
@@ -466,7 +467,7 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
                         doAssert false, "this must not happen"
 
     try:
-        var total_len = rp.len.uint16
+        # var total_len = rp.len.uint16
         # rp.shiftl SizeHeaderLen
         # rp.write(total_len)
         rp.shiftl CidHeaderLen
@@ -517,7 +518,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
             fatal "cid mismatch!", c1 = self.selectedCon.cid, c2 = cid; quit(1)
 
         if size.int < bytes:
-            trace "closing read channel.", size
+            trace "closing read channel.", size = size
             self.store.reuse move sv
             self.stop(false)
             raise newException(CancelledError, message = "read close, size: " & $size)

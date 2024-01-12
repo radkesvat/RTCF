@@ -52,7 +52,7 @@ proc writeloop(self: ConnectorAdapter){.async.} =
             sv.reserve(bufferSize)
             var actual = await self.socket.readOnce(sv.buf(), bufferSize)
             if actual == 0:
-                trace "Writeloop read 0 !";
+                trace "Writeloop read 0 !"
                 self.store.reuse move sv
                 if not self.stopped: signal(self, both, close)
                 break
