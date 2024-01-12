@@ -156,14 +156,14 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         if self.stopped: raise FlowCloseError()
-        self.readCompleteEv.clear()
+        self.writeCompleteEv.clear()
 
         var size: uint16 = rp.len.uint16
         rp.shiftl 2
         rp.write(size)
         rp.bytes(byteseq):
             var task = self.socketw.send(byteseq, Binary)
-            task.addCallback proc(udata: pointer) = self.readCompleteEv.fire()
+            task.addCallback proc(udata: pointer) = self.writeCompleteEv.fire()
             var timeout = sleepAsync(writeTimeOut)
             if (await race(task, timeout)) == timeout:
                 await task
