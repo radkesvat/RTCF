@@ -86,12 +86,19 @@ proc closeRead(socket: WSSession, store: Store){.async.} =
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
         if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
-        await self.writeCompleteEv.wait()
         await self.readCompleteEv.wait()
+        await self.socketr.closeRead(self.store)
+
+
+        await self.writeCompleteEv.wait()
         if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
+
+
+        await self.socketw.close()
+        await self.socketr.close()
         await sleepAsync(2.seconds)
         
-        await self.socketw.close() and self.socketr.close()
+        # await self.socketw.close() and self.socketr.close()
         # await self.socketr.close()
         # let cr = self.socketr.closeRead(self.store)
         # await self.socketw.close()

@@ -9,7 +9,7 @@ logScope:
     topic = "Kharej RightSide"
 
 
-const parallelCons = 2
+const parallelCons = 1
 
 var disconnectEV = newAsyncEvent()
 var activeCons = 0
