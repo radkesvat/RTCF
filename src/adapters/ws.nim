@@ -25,6 +25,7 @@ type
         keepAliveFut: Future[void]
         readCompleteEv: AsyncEvent
         writeCompleteEv: AsyncEvent
+        finished:AsyncEvent
 
 const writeTimeOut = 30000.milliseconds
 const pingInterval = 60.seconds
@@ -33,13 +34,16 @@ const pingInterval = 60.seconds
 var readQueue = initDeque[StringView](initialSize = 4096)
 
 
+
 proc prepareCloseBody(code: StatusCodes, reason: string): seq[byte] =
     result = reason.toBytes
     if ord(code) > 999:
         result = @(ord(code).uint16.toBytesBE()) & result
 
 
-proc closeRead(socket: WSSession, store: Store){.async.} =
+proc closeRead(socket: WSSession, store: Store, finish:AsyncEvent){.async.} =
+    defer:finish.fire()
+
     if socket.readyState != ReadyState.Open:
         return
     # read frames until closed
@@ -92,7 +96,7 @@ proc stop*(self: WebsocketAdapter) =
 
 
         await self.readCompleteEv.wait()
-        await self.socketr.closeRead(self.store)
+        await self.socketr.closeRead(self.store,self.finished)
 
 
         if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
@@ -113,6 +117,7 @@ proc stop*(self: WebsocketAdapter) =
     if not self.stopped:
         trace "stopping"
         self.stopped = true
+        self.finished.clear()
         if not isNil(self.onClose): self.onClose()
         asyncSpawn breakCycle()
 
@@ -151,6 +156,8 @@ proc init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSS
     self.onClose = onClose
     self.writeCompleteEv = newAsyncEvent()
     self.readCompleteEv = newAsyncEvent()
+    self.finished = newAsyncEvent()
+    self.finished.fire()
     # self.discardReadFut = discardRead(self)
 
 proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession, socketw: WSSession, store: Store,
@@ -162,10 +169,15 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 
 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
-    if self.stopped: raise FlowCloseError()
 
     try:
+        if self.stopped: raise FlowCloseError()
         self.writeCompleteEv.clear()
+
+        # if not self.finished.isSet:
+        #     await self.finished.wait()
+        #     raise FlowCloseError
+
         var size: uint16 = rp.len.uint16
         rp.shiftl 2
         rp.write(size)
@@ -183,7 +195,12 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
 
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
-        self.stop; raise e
+        self.stop()
+        if not self.finished.isSet():
+            self.writeCompleteEv.fire()
+            await self.finished.wait()
+        raise e
+
     finally:
         self.store.reuse rp
         self.writeCompleteEv.fire()
@@ -191,11 +208,12 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
 
 
 method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
-    if self.stopped: raise FlowCloseError()
-    self.readCompleteEv.clear()
     var sv = self.store.pop()
     var size: uint16 = 0
-    try:
+    try:    
+        if self.stopped: raise FlowCloseError()
+        self.readCompleteEv.clear()
+
         trace "asking for ", bytes = bytes
 
         while true:
@@ -240,7 +258,11 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 
     except CatchableError as e:
         self.store.reuse move sv
-        self.stop; raise e
+        self.stop()
+        if not self.readCompleteEv.isSet():
+            self.writeCompleteEv.fire()
+            await self.finished.wait()
+        raise e
     finally:
         self.readCompleteEv.fire()
 
