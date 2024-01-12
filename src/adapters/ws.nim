@@ -127,6 +127,8 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
+        rp.shiftl 2
+        rp.write(rp.len.uint16)
         rp.bytes(byteseq):
             # var task = self.socketw.send(byteseq, Binary)
             # var timeout = sleepAsync(writeTimeOut)
@@ -135,7 +137,7 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
             #     raise newException(AsyncTimeoutError, "write timed out")
             # else:
             #     timeout.cancelSoon()
-            await  self.socketw.send(byteseq, Binary).wait(writeTimeOut)
+            await self.socketw.send(byteseq, Binary).wait(writeTimeOut)
 
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
@@ -146,6 +148,7 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
 
 method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     var sv = self.store.pop()
+    var size: uint16 = 0
     try:
         # trace "asking for ", bytes = bytes
 
@@ -154,25 +157,39 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                 if not sv.isNil: self.store.reuse sv
                 return readQueue.popFirst()
 
-            # var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
-            var frame = await self.socketr.readFrame(self.socketr.extensions)
-            if frame.isNil:
-                assert self.socketr.readyState == ReadyState.Closed
-                raise FlowCloseError()
-            self.socketr.binary = frame.opcode == Opcode.Binary
-            sv.reserve(frame.remainder.int)
-            let bytesread = await frame.read(self.socketr.stream.reader, sv.buf, frame.remainder.int)
-            trace "received", bytes = bytesread
+            var size = await self.socketr.recv(cast[ptr byte](addr size), sizeof(size))
+            if size == 0:raise FlowCloseError()
 
-            if bytesread >= bytes:
-                readQueue.addLast move sv
-            else:
-                if bytesread == 0:
-                    trace "received 0 bytes from ws socket"
-                    raise FlowCloseError()
-                else:
-                    fatal "read bytes less than wanted !"
-                    quit(1)
+            sv.reserve size
+            var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size)
+            if payload_size == 0:raise FlowCloseError()
+
+            trace "received", bytes = bytesread
+            readQueue.addLast move sv
+        # while true:
+        #     if readQueue.len > 0:
+        #         if not sv.isNil: self.store.reuse sv
+        #         return readQueue.popFirst()
+
+        #     # var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
+        #     var frame = await self.socketr.readFrame(self.socketr.extensions)
+        #     if frame.isNil:
+        #         assert self.socketr.readyState == ReadyState.Closed
+        #         raise FlowCloseError()
+        #     self.socketr.binary = frame.opcode == Opcode.Binary
+        #     sv.reserve(frame.remainder.int)
+        #     let bytesread = await frame.read(self.socketr.stream.reader, sv.buf, frame.remainder.int)
+        #     trace "received", bytes = bytesread
+
+        #     if bytesread >= bytes:
+        #         readQueue.addLast move sv
+        #     else:
+        #         if bytesread == 0:
+        #             trace "received 0 bytes from ws socket"
+        #             raise FlowCloseError()
+        #         else:
+        #             fatal "read bytes less than wanted !"
+        #             quit(1)
 
     except CatchableError as e:
         self.store.reuse move sv

@@ -186,11 +186,12 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             error "HandleCid TimedOut [Write] ", msg = e.name, cid = cid
 
             notice "saving ", cid = cid
-            if not self.restoreFut.finished():
-                self.restoreFut.addCallback proc(udata: pointer){.gcsafe.} =
+            if not  self.restoreFut.isNil():
+                if  not self.restoreFut.finished():
+                    self.restoreFut.addCallback proc(udata: pointer){.gcsafe.} =
+                        discard muxSaveQueue.put (cid, nil)
+                else:
                     discard muxSaveQueue.put (cid, nil)
-            else:
-                discard muxSaveQueue.put (cid, nil)
             return
 
         except [ AsyncStreamError, TransportError, FlowError, WebSocketError]:
@@ -203,11 +204,12 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             #     discard globalTable[cid].second.send(closePacket(self, cid))
 
             notice "saving ", cid = cid
-            if not self.restoreFut.finished():
-                self.restoreFut.addCallback proc(udata: pointer){.gcsafe.} =
+            if not  self.restoreFut.isNil():
+                if not self.restoreFut.finished():
+                    self.restoreFut.addCallback proc(udata: pointer){.gcsafe.} =
+                        discard muxSaveQueue.put (cid, sv)
+                else:
                     discard muxSaveQueue.put (cid, sv)
-            else:
-                discard muxSaveQueue.put (cid, sv)
 
             return
         except CatchableError as e:
