@@ -116,14 +116,14 @@ proc stop*(self: WebsocketAdapter) =
 
 
 
-# proc discardRead(self: WebsocketAdapter){.async.} =
-#     var buf = allocShared(20)
-#     defer:
-#         deallocShared buf
-#     try:
-#         while not self.stopped: discard self.socketw.recv(buf, 20)
-#     except:
-#         discard
+proc discardRead(self: WebsocketAdapter){.async.} =
+    var buf = allocShared(20)
+    defer:
+        deallocShared buf
+    try:
+        while not self.stopped: discard self.socketw.recv(buf, 20)
+    except:
+        discard
 
 
 
@@ -148,7 +148,7 @@ proc init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSS
     self.onClose = onClose
     self.writeCompleteEv = newAsyncEvent()
     self.readCompleteEv = newAsyncEvent()
-    # self.discardReadFut = discardRead(self)
+    self.discardReadFut = discardRead(self)
 
 proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession, socketw: WSSession, store: Store,
         onClose: CloseCb): WebsocketAdapter {.raises: [].} =
