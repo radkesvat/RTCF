@@ -25,7 +25,7 @@ type
         keepAliveFut: Future[void]
         readCompleteEv:AsyncEvent
 
-const writeTimeOut = 300.milliseconds
+const writeTimeOut = 30000.milliseconds
 const pingInterval = 60.seconds
 
 
@@ -86,10 +86,11 @@ proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
         if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
         if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
-        await self.socketw.close()
+        self.socketw.stream.close()
         # await self.socketr.close()
         await self.readCompleteEv.wait()
-        await self.socketr.closeRead(self.store)
+        self.socketr.stream.close()
+        # await self.socketr.closeRead(self.store)
 
         await sleepAsync(5.seconds)
         self.signal(both, breakthrough)
