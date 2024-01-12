@@ -176,7 +176,6 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 
             var size_header_read = await self.socketr.recv(cast[ptr byte](addr size), 2)
             if size_header_read != 2: raise FlowCloseError()
-            echo "size ", size
 
             sv.reserve size.int
             var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size.int)

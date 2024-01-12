@@ -60,7 +60,6 @@ proc readloop(self: ConnectionAdapter){.async.} =
             trace "Readloop write to socket", count = sv.len
             var written = await socket.write(sv.buf, sv.len)
             if sv.len != written:
-                echo "fail was " ,$sv.len, " and " , " ",$written," ", self.name
                 raise newAsyncStreamIncompleteError()
 
         except [CancelledError, FlowError, AsyncTimeoutError, TransportError, AsyncChannelError, AsyncStreamError]:
@@ -92,7 +91,7 @@ proc writeloop(self: ConnectionAdapter){.async.} =
                 )
 
             if actual == 0:
-                echo "Writeloop read 0 !", self.name
+                trace "Writeloop read 0 !"
                 self.store.reuse move sv
                 if not self.stopped: signal(self, both, close)
                 break
@@ -102,12 +101,12 @@ proc writeloop(self: ConnectionAdapter){.async.} =
 
         except [CancelledError, TransportError, AsyncTimeoutError, AsyncChannelError]:
             var e = getCurrentException()
-            echo "Writeloop Cancel [Read] ", e.name," ", self.name
+            trace "Writeloop Cancel [Read]", msg = e.name
             self.store.reuse sv
             if not self.stopped: signal(self, both, close)
             return
         except CatchableError as e:
-            error "Writeloop Unexpected Error [Read]", name = e.name, msg = e.msg
+            trace "Writeloop Cancel [Write]", msg = e.name
             quit(1)
 
 
@@ -177,7 +176,6 @@ proc stop*(self: ConnectionAdapter) =
 
     if not self.stopped:
         trace "stopping"
-        echo "stop ",self.name
         self.stopped = true
         if not isNil(self.socket): self.socket.close()
         self.td.unregister(self.td_id)
@@ -185,8 +183,7 @@ proc stop*(self: ConnectionAdapter) =
         asyncSpawn breakCycle()
 
 method signal*(self: ConnectionAdapter, dir: SigDirection, sig: Signals, chain: Chains = default){.raises: [].} =
-    if sig == close or sig == stop: 
-        self.stop()
+    if sig == close or sig == stop: self.stop()
 
     if sig == breakthrough: doAssert self.stopped, "break through signal while still running?"
 

@@ -86,7 +86,6 @@ proc globalTableHas(id: Cid): bool =
 
 
 proc closePacket(self: MuxAdapetr, cid: Cid): StringView =
-    echo "making close for ", cid
     var sv = self.store.pop()
     sv.reserve(2)
     # sv.write(0.uint16); sv.shiftl sizeof Cid
@@ -106,7 +105,6 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
             if sc:
                 await fchan.send(closePacket(self, cid))
-            echo "closing ", cid
 
             await fchan.send(nil, hasThreadSupport)
 
@@ -334,7 +332,6 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
 
                 case whenNotFound:
                     of create:
-                        # echo "make:      ",cid
                         trace "creating left channels", cid = cid
                         safeAccess:
                             globalTable[cid].first = newAsyncChannel[StringView](maxItems = ConnectionChanFixedSizeW)
@@ -455,7 +452,6 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
     if self.stopped: self.store.reuse rp; raise newException(AsyncChannelError, message = "closed pipe")
     debug "Write", size = rp.len
 
-    var testcid = self.selectedCon.cid
     when not defined(release):
         case self.location:
             of BeforeGfw:
@@ -480,15 +476,12 @@ method write*(self: MuxAdapetr, rp: StringView, chain: Chains = default): Future
 
 
     except CatchableError as e:
-        echo "write close: ",testcid
-
         self.store.reuse(rp)
         self.stop(); raise e
 
 
 method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
     if self.stopped: raise newException(AsyncChannelError, message = "closed pipe")
-    var testcid = self.selectedCon.cid
 
     when not defined(release):
         case self.location:
@@ -534,7 +527,6 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
         return sv
 
     except CatchableError as e:
-        echo "read close: ",testcid
         self.stop(); raise e
 
 
