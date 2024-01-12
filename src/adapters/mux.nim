@@ -151,6 +151,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             # if self.location == AfterGfw:
             #     discard globalTable[cid].second.send(closePacket(self, cid))
             notice "saving ", cid = cid
+            # await sleepAsync(5000)
             discard muxSaveQueue.put (cid, sv)
 
             return
@@ -209,6 +210,10 @@ proc restoreLoop(self: MuxAdapetr) {.async.} =
     while not self.stopped:
         try:
             var (cid, data) = await muxSaveQueue.get()
+            if self.stopped: 
+                await muxSaveQueue.addFirst (cid, data)
+                return
+
             notice "Restored", cid = cid
             self.register(cid, data)
         except:
