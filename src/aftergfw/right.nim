@@ -9,7 +9,7 @@ logScope:
     topic = "Kharej RightSide"
 
 
-const parallelCons = 1
+const parallelCons = 2
 
 var disconnectEV = newAsyncEvent()
 var activeCons = 0
@@ -83,7 +83,7 @@ proc reconnect(){.async.} =
             await disconnectEV.wait()
             if gfs:
                 info "Reconnecting in 3 secconds..."
-                await sleepAsync(15.seconds)
+                await sleepAsync(3.seconds)
             else:
                 gfs = true
             disconnectEV.clear()

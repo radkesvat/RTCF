@@ -304,9 +304,12 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                 else:
                     while globalTableHas(cid):
                         try:
+                            echo self.name & " wana write ,", size, ", to ", cid
                             if not (globalTable[cid].second.trySend(data)):
                                 await sleepAsync(80)
                                 continue
+                            echo self.name & " did write ,", size, ", to ", cid
+
 
                             data = nil; break operation
                         except AsyncChannelError as e:
@@ -433,6 +436,10 @@ method start(self: MuxAdapetr){.raises: [].} =
 proc newMuxAdapetr*(name: string = "MuxAdapetr", master: AsyncChannel[Cid], store: Store, loc: Location,
     cid: Cid = 0): MuxAdapetr {.raises: [].} =
     result = new MuxAdapetr
+    var gid{.global.} = 0
+    inc gid
+    var name = "MUX " & $ gid
+
     result.init(name, master, store, loc, cid)
     trace "Initialized new MuxAdapetr", name
 
