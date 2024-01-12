@@ -25,7 +25,7 @@ type
         keepAliveFut: Future[void]
         readCompleteEv:AsyncEvent
 
-const writeTimeOut = 35000.milliseconds
+const writeTimeOut = 300.milliseconds
 const pingInterval = 60.seconds
 
 
