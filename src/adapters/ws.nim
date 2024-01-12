@@ -90,8 +90,8 @@ proc stop*(self: WebsocketAdapter) =
         await self.readCompleteEv.wait()
         if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
         await sleepAsync(2.seconds)
-        self.socketw.stream.close()
-        self.socketr.stream.close()
+        
+        await self.socketw.close() and self.socketr.close()
         # await self.socketr.close()
         # let cr = self.socketr.closeRead(self.store)
         # await self.socketw.close()
