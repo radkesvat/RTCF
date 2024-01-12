@@ -27,7 +27,7 @@ type
         writeCompleteEv: AsyncEvent
         finished:AsyncEvent
 
-const writeTimeOut = 30000.milliseconds
+const writeTimeOut = 3000.milliseconds
 const pingInterval = 60.seconds
 
 
@@ -177,7 +177,8 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
         # if not self.finished.isSet:
         #     await self.finished.wait()
         #     raise FlowCloseError
-
+        
+        
         var size: uint16 = rp.len.uint16
         rp.shiftl 2
         rp.write(size)
@@ -186,9 +187,11 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
             var timeout = sleepAsync(writeTimeOut)
             if (await race(task, timeout)) == timeout:
                 await task
+                self.store.reuse rp
                 raise newException(AsyncTimeoutError, "write timed out")
             else:
                 timeout.cancelSoon()
+                self.store.reuse rp
 
 
             # await self.socketw.send(byteseq, Binary).wait(writeTimeOut)
@@ -202,7 +205,6 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
         raise e
 
     finally:
-        self.store.reuse rp
         self.writeCompleteEv.fire()
         
 
@@ -259,7 +261,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     except CatchableError as e:
         self.store.reuse move sv
         self.stop()
-        if not self.readCompleteEv.isSet():
+        if not self.finished.isSet():
             self.readCompleteEv.fire()
             await self.finished.wait()
         raise e
