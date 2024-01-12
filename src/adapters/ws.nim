@@ -128,8 +128,8 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
-        rp.shiftl 2
         var size: uint16 = rp.len.uint16
+        rp.shiftl 2
         rp.write(size)
         rp.bytes(byteseq):
             # var task = self.socketw.send(byteseq, Binary)
