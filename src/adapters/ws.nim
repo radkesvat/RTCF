@@ -23,6 +23,7 @@ type
         onClose: CloseCb
         discardReadFut: Future[void]
         keepAliveFut: Future[void]
+        readerFut:Future[int]
 
 const writeTimeOut = 35000.milliseconds
 const pingInterval = 60.seconds
@@ -83,6 +84,7 @@ proc closeRead(socket: WSSession, store: Store){.async.} =
 
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
+        if not isNil(self.readerFut): await self.readerFut.cancelAndWait()
         if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
         if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
         await self.socketw.close()
@@ -174,14 +176,15 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                 if not sv.isNil: self.store.reuse sv
                 return readQueue.popFirst()
 
-            var size_header_read = await self.socketr.recv(cast[ptr byte](addr size), 2)
+            self.readerFut = self.socketr.recv(cast[ptr byte](addr size), 2)
+            var size_header_read = await self.readerFut 
             if size_header_read != 2: raise FlowCloseError()
 
             sv.reserve size.int
             var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size.int)
             if payload_size == 0: raise FlowCloseError()
 
-            echo "received ",$payload_size
+            trace "received ", bytes = payload_size
             readQueue.addLast move sv
         # while true:
         #     if readQueue.len > 0:
