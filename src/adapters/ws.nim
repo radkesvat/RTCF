@@ -163,6 +163,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
             sv.reserve size
             var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size)
             if payload_size == 0:raise FlowCloseError()
+            sv.shiftr 2
 
             trace "received", bytes = bytesread
             readQueue.addLast move sv
