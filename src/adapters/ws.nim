@@ -23,7 +23,7 @@ type
         onClose: CloseCb
         discardReadFut: Future[void]
         keepAliveFut: Future[void]
-        readerFut:Future[int]
+        readCompleteEv:AsyncEvent
 
 const writeTimeOut = 35000.milliseconds
 const pingInterval = 60.seconds
@@ -84,11 +84,11 @@ proc closeRead(socket: WSSession, store: Store){.async.} =
 
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
-        if not isNil(self.readerFut): await self.readerFut.cancelAndWait()
         if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
         if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
         await self.socketw.close()
         # await self.socketr.close()
+        await self.readCompleteEv.wait()
         await self.socketr.closeRead(self.store)
 
         await sleepAsync(5.seconds)
@@ -133,6 +133,7 @@ proc init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSS
     self.socketw = socketw
     self.store = store
     self.onClose = onClose
+    self.readCompleteEv = newAsyncEvent()
     self.discardReadFut = discardRead(self)
 
 proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession, socketw: WSSession, store: Store,
@@ -144,6 +145,8 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession,
 
 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
+    if self.stopped: raise FlowCloseError()
+    
     try:
         var size: uint16 = rp.len.uint16
         rp.shiftl 2
@@ -166,6 +169,8 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
 
 
 method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Future[StringView] {.async.} =
+    if self.stopped: raise FlowCloseError()
+    self.readCompleteEv.clear()
     var sv = self.store.pop()
     var size: uint16 = 0
     try:
@@ -174,10 +179,10 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
         while true:
             if readQueue.len > 0:
                 if not sv.isNil: self.store.reuse sv
+                self.readCompleteEv.fire()
                 return readQueue.popFirst()
 
-            self.readerFut = self.socketr.recv(cast[ptr byte](addr size), 2)
-            var size_header_read = await self.readerFut 
+            var size_header_read = await self.socketr.recv(cast[ptr byte](addr size), 2)
             if size_header_read != 2: raise FlowCloseError()
 
             sv.reserve size.int
