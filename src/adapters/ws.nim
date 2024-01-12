@@ -159,11 +159,12 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                 if not sv.isNil: self.store.reuse sv
                 return readQueue.popFirst()
 
-            var size = await self.socketr.recv(cast[ptr byte](addr size), sizeof(size))
-            if size == 0: raise FlowCloseError()
+            var size_header_read = await self.socketr.recv(cast[ptr byte](addr size), 2)
+            if size_header_read != 2: raise FlowCloseError()
+            echo "size ", size
 
-            sv.reserve size
-            var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size)
+            sv.reserve size.int
+            var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size.int)
             if payload_size == 0: raise FlowCloseError()
 
             trace "received", bytes = payload_size
