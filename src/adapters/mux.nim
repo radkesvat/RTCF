@@ -179,7 +179,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
                     return
                 trace "Sending data from", cid = cid
                 await procCall write(Tunnel(self), sv)
-        except [AsyncStreamError, TransportError, FlowError, WebSocketError]:
+        except [AsyncStreamError, TransportError,CancelledError, FlowError, WebSocketError]:
             notice "saving ", cid = cid
             {.cast(gcsafe).}: discard muxSaveQueue.put (cid, sv)
             return
