@@ -146,7 +146,6 @@ proc readloop(self: ConnectorAdapter){.async.} =
                 if isNil(self.connecting): self.connecting = connect(self)
 
                 if not await self.connecting:
-                    self.store.reuse move sv
                     if not self.stopped: signal(self, both, close)
                     return
 

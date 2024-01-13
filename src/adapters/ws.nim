@@ -28,7 +28,7 @@ type
 
         finished: AsyncEvent
 
-const writeTimeOut = 1800.milliseconds
+const writeTimeOut = 900.milliseconds
 const pingInterval = 60.seconds
 
 
@@ -105,7 +105,7 @@ proc stop*(self: WebsocketAdapter) =
         var lastchance = false
         while true:
             if self.readFut != nil and not self.readFut.completed():
-                if not lastchance: lastchance = true; await sleepAsync(1000)
+                if not lastchance: lastchance = true; await sleepAsync(1.seconds)
                 else:
                     try:
                         await self.readFut.cancelAndWait()
@@ -115,7 +115,7 @@ proc stop*(self: WebsocketAdapter) =
             else: break
                 
 
-        await wc 
+        await wc.wait(2.seconds)
         await self.socketr.closeRead(self.store, self.finished)
         # echo "1"
         # await self.writeCompleteEv.wait()
