@@ -7,7 +7,7 @@ import checksums/sha1
 logScope:
     topic = "Setup"
 
-const version = "1.5"
+const version = "1.6"
 
 
 type RunMode*{.pure.} = enum

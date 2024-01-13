@@ -82,19 +82,19 @@ printf  "\n"
 
 
 case $(uname -m) in
-    x86_64)  URL="https://github.com/radkesvat/RTCF/releases/download/V1.5/RTCF_ST_AMD-1.5.zip" ;;
-    arm)     URL="https://github.com/radkesvat/RTCF/releases/download/V1.5/RTCF_ST_AMD-1.5.zip" ;;
-    aarch64) URL="https://github.com/radkesvat/RTCF/releases/download/V1.5/RTCF_ST_AMD-1.5.zip" ;;
+    x86_64)  URL="https://github.com/radkesvat/RTCF/releases/download/V1.6/RTCF_ST_AMD-1.6.zip" ;;
+    arm)     URL="https://github.com/radkesvat/RTCF/releases/download/V1.6/RTCF_ST_AMD-1.6.zip" ;;
+    aarch64) URL="https://github.com/radkesvat/RTCF/releases/download/V1.6/RTCF_ST_AMD-1.6.zip" ;;
     
     *)   print_red "Unable to determine system architecture."; exit 1 ;;
 
 esac
 
 
-wget  $URL -O RTCF_ST_AMD-1.5.zip
-unzip -o RTCF_ST_AMD-1.5.zip
+wget  $URL -O RTCF_ST_AMD-1.6.zip
+unzip -o RTCF_ST_AMD-1.6.zip
 chmod +x RTCF
-rm RTCF_ST_AMD-1.5.zip
+rm RTCF_ST_AMD-1.6.zip
 
 echo "finished."
 
