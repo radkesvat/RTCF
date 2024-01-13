@@ -96,7 +96,7 @@ proc stop*(self: WebsocketAdapter) =
 
         if self.writeFut != nil and not self.writeFut.completed():
             try:
-                await self.writeFut.wait(2.seconds)
+                await self.writeFut.wait(1.seconds)
             except:
                 discard
 
@@ -118,7 +118,11 @@ proc stop*(self: WebsocketAdapter) =
             await wc.wait(2.seconds)
         except:
             discard
-        await self.socketr.closeRead(self.store, self.finished)
+        try:
+            await self.socketr.closeRead(self.store, self.finished).wait(2.seconds)
+        except:
+            discard
+
         # echo "1"
         # await self.writeCompleteEv.wait()
         # echo "2"
