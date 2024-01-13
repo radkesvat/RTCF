@@ -113,9 +113,11 @@ proc stop*(self: WebsocketAdapter) =
                     except:
                         discard
             else: break
-                
 
-        await wc.wait(2.seconds)
+        try:
+            await wc.wait(2.seconds)
+        except:
+            discard
         await self.socketr.closeRead(self.store, self.finished)
         # echo "1"
         # await self.writeCompleteEv.wait()
@@ -259,7 +261,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                     return readQueue.popFirst()
 
             self.readFut = self.socketr.recv(cast[ptr byte](addr size), 2)
-            var size_header_read = await self.readFut 
+            var size_header_read = await self.readFut
             if size_header_read != 2: raise FlowCloseError()
 
             sv.reserve size.int
