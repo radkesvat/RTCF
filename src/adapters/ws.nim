@@ -28,7 +28,7 @@ type
 
         finished: AsyncEvent
 
-const writeTimeOut = 1200.milliseconds
+const writeTimeOut = 1800.milliseconds
 const pingInterval = 60.seconds
 
 
