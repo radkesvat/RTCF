@@ -133,7 +133,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
 proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.async.} =
     var first_data = firstdata_const
-
+    
     while true:
         var sv: StringView = nil
         try:
@@ -152,7 +152,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             #     discard globalTable[cid].second.send(closePacket(self, cid))
             notice "saving ", cid = cid
             # await sleepAsync(5000)
-            discard muxSaveQueue.put (cid, sv)
+            {.cast(gcsafe).}: discard muxSaveQueue.put (cid, sv)
 
             return
         except CatchableError as e:
@@ -175,20 +175,20 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             else:
                 if self.stopped:
                     notice "saving ", cid = cid
-                    discard muxSaveQueue.put (cid, sv)
+                    {.cast(gcsafe).}: discard muxSaveQueue.put (cid, sv)
                     return
                 trace "Sending data from", cid = cid
                 await procCall write(Tunnel(self), sv)
         except [AsyncStreamError, TransportError, FlowError, WebSocketError]:
             notice "saving ", cid = cid
-            discard muxSaveQueue.put (cid, sv)
+            {.cast(gcsafe).}: discard muxSaveQueue.put (cid, sv)
             return
 
         except AsyncTimeoutError as e:
             if not self.stopped: signal(self, both, close)
             error "HandleCid TimedOut [Write] ", msg = e.name, cid = cid
             notice "saving ", cid = cid
-            discard muxSaveQueue.put (cid, nil)
+            {.cast(gcsafe).}: discard muxSaveQueue.put (cid, nil)
             return
 
         except CatchableError as e:
@@ -206,15 +206,16 @@ proc register(self: MuxAdapetr, cid: Cid, firstdata: StringView = nil) =
     asyncSpawn fut
 
 proc restoreLoop(self: MuxAdapetr) {.async.} =
-    while not self.stopped:
+    {.cast(gcsafe).}:
+        while not self.stopped:
 
-        var (cid, data) = await muxSaveQueue.get()
-        if self.stopped:
-            await muxSaveQueue.addFirst (cid, data)
-            return
+            var (cid, data) = await muxSaveQueue.get()
+            if self.stopped:
+                await muxSaveQueue.addFirst (cid, data)
+                return
 
-        notice "Restored", cid = cid
-        self.register(cid, data)
+            notice "Restored", cid = cid
+            self.register(cid, data)
 
 
 proc acceptcidloop(self: MuxAdapetr) {.async.} =

@@ -43,49 +43,50 @@ proc prepareCloseBody(code: StatusCodes, reason: string): seq[byte] =
 
 
 proc closeRead(socket: WSSession, store: Store, finish: AsyncEvent){.async.} =
-    defer: finish.fire()
+    {.cast(gcsafe).}:
+        defer: finish.fire()
 
-    if socket.readyState != ReadyState.Open:
-        return
-    # read frames until closed
-    var sv: StringView = nil
-    try:
-        socket.readyState = ReadyState.Closing
+        if socket.readyState != ReadyState.Open:
+            return
+        # read frames until closed
+        var sv: StringView = nil
+        try:
+            socket.readyState = ReadyState.Closing
 
-        # await socket.send(prepareCloseBody(StatusFulfilled, ""), opcode = Opcode.Close)
+            # await socket.send(prepareCloseBody(StatusFulfilled, ""), opcode = Opcode.Close)
 
-        while socket.readyState != ReadyState.Closed:
-            var size: uint16 = 0
+            while socket.readyState != ReadyState.Closed:
+                var size: uint16 = 0
 
-            var size_header_read = await socket.recv(cast[ptr byte](addr size), 2)
-            if size_header_read != 2: raise FlowCloseError()
-            sv = store.pop()
-            sv.reserve size.int
-            var payload_size = await socket.recv(cast[ptr byte](sv.buf), size.int)
-            if payload_size == 0: raise FlowCloseError()
+                var size_header_read = await socket.recv(cast[ptr byte](addr size), 2)
+                if size_header_read != 2: raise FlowCloseError()
+                sv = store.pop()
+                sv.reserve size.int
+                var payload_size = await socket.recv(cast[ptr byte](sv.buf), size.int)
+                if payload_size == 0: raise FlowCloseError()
 
-            trace "received", bytes = payload_size
-            echo "saved 1 packet"
-            readQueue.addLast move sv
+                trace "received", bytes = payload_size
+                echo "saved 1 packet"
+                readQueue.addLast move sv
 
-            # var frame = await socket.readFrame()
-            # if frame.isNil: break
-            # socket.binary = frame.opcode == Opcode.Binary
-            # var sv = store.pop()
-            # sv.reserve(frame.remainder.int)
-            # let read = await frame.read(socket.stream.reader, sv.buf, frame.remainder.int)
-            # if read == 0:
-            #     store.reuse sv
-            #     break
-            # echo "saved 1 frame ", sv.len
-            # readQueue.addLast sv
+                # var frame = await socket.readFrame()
+                # if frame.isNil: break
+                # socket.binary = frame.opcode == Opcode.Binary
+                # var sv = store.pop()
+                # sv.reserve(frame.remainder.int)
+                # let read = await frame.read(socket.stream.reader, sv.buf, frame.remainder.int)
+                # if read == 0:
+                #     store.reuse sv
+                #     break
+                # echo "saved 1 frame ", sv.len
+                # readQueue.addLast sv
 
-    except CancelledError as exc:
-        raise exc
-    except CatchableError as exc:
-        discard # most likely EOF
-    finally:
-        if not sv.isNil: store.reuse sv
+        except CancelledError as exc:
+            raise exc
+        except CatchableError as exc:
+            discard # most likely EOF
+        finally:
+            if not sv.isNil: store.reuse sv
 
 
 
@@ -252,9 +253,10 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
         trace "asking for ", bytes = bytes
 
         while true:
-            if readQueue.len > 0:
-                if not sv.isNil: self.store.reuse sv
-                return readQueue.popFirst()
+            {.cast(gcsafe).}:
+                if readQueue.len > 0:
+                    if not sv.isNil: self.store.reuse sv
+                    return readQueue.popFirst()
 
             self.readFut = self.socketr.recv(cast[ptr byte](addr size), 2)
             var size_header_read = await self.readFut 
@@ -265,7 +267,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
             if payload_size == 0: raise FlowCloseError()
 
             trace "received ", bytes = payload_size
-            readQueue.addLast move sv
+            {.cast(gcsafe).}: readQueue.addLast move sv
         # while true:
         #     if readQueue.len > 0:
         #         if not sv.isNil: self.store.reuse sv
