@@ -28,7 +28,7 @@ type
 const
     bufferSize = 4090
     timeOut = 180.seconds
-    writeTimeOut = 2.seconds
+    writeTimeOut = 3.seconds
     firstReadTimeout = 3.seconds
 
 proc getRawSocket*(self: ConnectionAdapter): StreamTransport {.inline.} = self.socket

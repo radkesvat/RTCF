@@ -128,6 +128,9 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
         asyncSpawn stopLoops()
 
+proc pause*(self: MuxAdapetr) =
+    if not isNil(self.acceptConnectionFut): cancelSoon(self.acceptConnectionFut)
+   
 
 
 
@@ -185,7 +188,7 @@ proc handleCid(self: MuxAdapetr, cid: Cid, firstdata_const: StringView = nil) {.
             return
 
         except AsyncTimeoutError as e:
-            if not self.stopped: signal(self, both, close)
+            # if not self.stopped: signal(self, both, close)
             error "HandleCid TimedOut [Write] ", msg = e.name, cid = cid
             notice "saving ", cid = cid
             {.cast(gcsafe).}: discard muxSaveQueue.put (cid, nil)
@@ -222,12 +225,13 @@ proc acceptcidloop(self: MuxAdapetr) {.async.} =
     while not self.stopped:
         try:
             let new_cid = await self.masterChannel.recv()
+            if self.stopped:
+                await self.masterChannel.send new_cid
+                return
             trace "acceptcidloop got a cid", cid = new_cid
             self.register(new_cid, nil)
-        except AsyncChannelError: # only means cancel !
-            error "acceptcidloop [newRegisters] got AsyncChannelError!"
-            if not self.stopped: signal(self, both, close)
-
+        except:
+            discard
 
 proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
     #read data from right adapetr, send it to the right chan
@@ -532,6 +536,9 @@ method signal*(self: MuxAdapetr, dir: SigDirection, sig: Signals, chain: Chains 
 
 
     if sig == close or sig == stop: self.stop()
+
+    if sig == pause: self.pause()
+
     procCall signal(Tunnel(self), dir, sig, chain)
 
     if sig == start: self.start()

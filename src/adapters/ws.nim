@@ -27,7 +27,7 @@ type
 
         finished: AsyncEvent
 
-const writeTimeOut = 900.milliseconds
+const writeTimeOut = 1500.milliseconds
 const pingInterval = 60.seconds
 
 
@@ -118,7 +118,7 @@ proc stop*(self: WebsocketAdapter) =
 
         try:
             echo "here"
-            await self.socket.closeRead(self.store, self.finished).wait(5.seconds)
+            await self.socket.closeRead(self.store, self.finished).wait(15.seconds)
             echo "done"
 
         except:
@@ -205,6 +205,7 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
         self.stop()
+        signal(self,both,pause)
         if not self.finished.isSet():
             await self.finished.wait()
         raise e
@@ -240,11 +241,11 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     except CatchableError as e:
         self.store.reuse move sv
         self.stop()
-        if not self.finished.isSet():
-            # self.readCompleteEv.fire()
-            echo "waiting for finish"
-            await self.finished.wait()
-            echo "waiting for finish"
+        # if not self.finished.isSet():
+        #     # self.readCompleteEv.fire()
+        #     echo "waiting for finish"
+        #     await self.finished.wait()
+        #     echo "waiting for finish"
 
         raise e
 
