@@ -17,8 +17,7 @@ logScope:
 type
     CloseCb = proc(): void {.raises: [], gcsafe.}
     WebsocketAdapter* = ref object of Adapter
-        socketw: WSSession
-        socketr: WSSession
+        socket: WSSession
         store: Store
         onClose: CloseCb
         discardReadFut: Future[void]
@@ -28,7 +27,7 @@ type
 
         finished: AsyncEvent
 
-const writeTimeOut = 3000.milliseconds
+const writeTimeOut = 900.milliseconds
 const pingInterval = 60.seconds
 
 
@@ -89,68 +88,49 @@ proc closeRead(socket: WSSession, store: Store, finish: AsyncEvent){.async.} =
             if not sv.isNil: store.reuse sv
 
 
-
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
         if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
 
         if self.writeFut != nil and not self.writeFut.completed():
             try:
-                await self.writeFut.wait(1.seconds)
+                await self.writeFut
             except:
                 discard
 
-        var wc = self.socketw.close()
-
-        var lastchance = false
-        while true:
-            if self.readFut != nil and not self.readFut.completed():
-                if not lastchance: lastchance = true; await sleepAsync(1.seconds)
-                else:
-                    try:
-                        await self.readFut.cancelAndWait()
-                        break
-                    except:
-                        discard
-            else: break
-
         try:
-            await wc.wait(2.seconds)
+            await self.socket.send(prepareCloseBody(StatusFulfilled, ""), opcode = Opcode.Close)
+            echo "ok send close"
         except:
-            discard
-        try:
-            await self.socketr.closeRead(self.store, self.finished).wait(2.seconds)
-        except:
+            echo "fail send close"
             discard
 
-        # echo "1"
-        # await self.writeCompleteEv.wait()
-        # echo "2"
-        # await self.socketw.close()
+        if self.readFut != nil and not self.readFut.completed():
+            try:
+                echo "wait for read"
+                discard await self.readFut
+                echo "read done"
+            except:
+                echo "cancel read " , getCurrentException().msg
+                discard
 
-        # echo "3"
-        # try:
-        #     await self.readCompleteEv.wait().wait(3.seconds)
-        # except: discard
-        # echo "4"
+    
 
-        # try:
-        #     await self.socketr.closeRead(self.store, self.finished).wait(3.seconds)
-        # except: discard
-        # echo "5"
+        try:
+            echo "here"
+            await self.socket.closeRead(self.store, self.finished).wait(5.seconds)
+            echo "done"
 
+        except:
+            echo "cancel close read"
 
-        # if not isNil(self.discardReadFut): await self.discardReadFut.cancelAndWait()
+            discard
 
 
-        # await self.socketr.close()
+    
         await sleepAsync(5.seconds)
 
-        # await self.socketw.close() and self.socketr.close()
-        # await self.socketr.close()
-        # let cr = self.socketr.closeRead(self.store)
-        # await self.socketw.close()
-        # await cr
+
 
         self.signal(both, breakthrough)
 
@@ -169,7 +149,7 @@ proc stop*(self: WebsocketAdapter) =
 #     defer:
 #         deallocShared buf
 #     try:
-#         while not self.stopped: discard self.socketw.recv(buf, 20)
+#         while not self.stopped: discard self.socket.recv(buf, 20)
 #     except:
 #         discard
 
@@ -178,8 +158,8 @@ proc stop*(self: WebsocketAdapter) =
 proc keepAlive(self: WebsocketAdapter){.async.} =
     while not self.stopped:
         try:
-            await self.socketw.ping(@[1.byte])
-            await self.socketr.ping(@[1.byte])
+            await self.socket.ping(@[1.byte])
+            await self.socket.ping(@[1.byte])
             await sleepAsync(pingInterval)
 
         except:
@@ -188,22 +168,18 @@ proc keepAlive(self: WebsocketAdapter){.async.} =
 
 
 
-proc init(self: WebsocketAdapter, name: string, socketr: WSSession, socketw: WSSession, store: Store, onClose: CloseCb) {.raises: [].} =
+proc init(self: WebsocketAdapter, name: string, socket: WSSession,  store: Store, onClose: CloseCb) {.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
-    self.socketr = socketr
-    self.socketw = socketw
+    self.socket = socket
     self.store = store
     self.onClose = onClose
-    # self.writeCompleteEv = newAsyncEvent()
-    # self.readCompleteEv = newAsyncEvent()
     self.finished = newAsyncEvent()
     self.finished.fire()
-    # self.discardReadFut = discardRead(self)
 
-proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socketr: WSSession, socketw: WSSession, store: Store,
+proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, store: Store,
         onClose: CloseCb): WebsocketAdapter {.raises: [].} =
     result = new WebsocketAdapter
-    result.init(name, socketr, socketw, store, onClose)
+    result.init(name, socket, store, onClose)
     trace "Initialized", name
 
 
@@ -212,40 +188,27 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
 
     try:
         if self.stopped: raise FlowCloseError()
-        # self.writeCompleteEv.clear()
-
-        # if not self.finished.isSet:
-        #     await self.finished.wait()
-        #     raise FlowCloseError
-
-
         var size: uint16 = rp.len.uint16
         rp.shiftl 2
         rp.write(size)
         rp.bytes(byteseq):
-            self.writeFut = self.socketw.send(byteseq, Binary)
+            self.writeFut = self.socket.send(byteseq, Binary)
             var timeout = sleepAsync(writeTimeOut)
             if (await race(self.writeFut, timeout)) == timeout:
-                await self.writeFut
                 self.store.reuse rp
+                await self.writeFut
                 raise newException(AsyncTimeoutError, "write timed out")
             else:
-                timeout.cancelSoon()
                 self.store.reuse rp
-
-
-            # await self.socketw.send(byteseq, Binary).wait(writeTimeOut)
+                timeout.cancelSoon()
 
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
         self.stop()
         if not self.finished.isSet():
-            # self.writeCompleteEv.fire()
             await self.finished.wait()
         raise e
 
-    # finally:
-    #     self.writeCompleteEv.fire()
 
 
 
@@ -254,7 +217,6 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     var size: uint16 = 0
     try:
         if self.stopped: raise FlowCloseError()
-        # self.readCompleteEv.clear()
 
         trace "asking for ", bytes = bytes
 
@@ -264,57 +226,32 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
                     if not sv.isNil: self.store.reuse sv
                     return readQueue.popFirst()
 
-            self.readFut = self.socketr.recv(cast[ptr byte](addr size), 2)
+            self.readFut = self.socket.recv(cast[ptr byte](addr size), 2)
             var size_header_read = await self.readFut
             if size_header_read != 2: raise FlowCloseError()
 
             sv.reserve size.int
-            var payload_size = await self.socketr.recv(cast[ptr byte](sv.buf), size.int)
+            var payload_size = await self.socket.recv(cast[ptr byte](sv.buf), size.int)
             if payload_size == 0: raise FlowCloseError()
 
             trace "received ", bytes = payload_size
             {.cast(gcsafe).}: readQueue.addLast move sv
-        # while true:
-        #     if readQueue.len > 0:
-        #         if not sv.isNil: self.store.reuse sv
-        #         return readQueue.popFirst()
-
-        #     # var bytesread = await self.socketr.recv(cast[ptr byte](sv.buf), bytes)
-        #     var frame = await self.socketr.readFrame(self.socketr.extensions)
-        #     if frame.isNil:
-        #         assert self.socketr.readyState == ReadyState.Closed
-        #         raise FlowCloseError()
-
-        #     self.socketr.binary = frame.opcode == Opcode.Binary
-        #     sv.reserve(frame.remainder.int)
-        #     let bytesread = await frame.read(self.socketr.stream.reader, sv.buf, frame.remainder.int)
-        #     trace "received", bytes = bytesread
-
-        #     if bytesread >= bytes:
-        #         readQueue.addLast move sv
-        #     else:
-        #         if bytesread == 0:
-        #             trace "received 0 bytes from ws socket"
-        #             raise FlowCloseError()
-        #         else:
-        #             fatal "read bytes less than wanted !"
-        #             quit(1)
 
     except CatchableError as e:
         self.store.reuse move sv
         self.stop()
         if not self.finished.isSet():
             # self.readCompleteEv.fire()
+            echo "waiting for finish"
             await self.finished.wait()
+            echo "waiting for finish"
+
         raise e
-    # finally:
-    #     self.readCompleteEv.fire()
 
 
 proc start(self: WebsocketAdapter) =
     {.cast(raises: []).}:
         trace "starting"
-        # self.keepAliveFut = keepAlive(self)
 
 
 method signal*(self: WebsocketAdapter, dir: SigDirection, sig: Signals, chain: Chains = default) =

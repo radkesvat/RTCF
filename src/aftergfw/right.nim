@@ -9,7 +9,7 @@ logScope:
     topic = "Kharej RightSide"
 
 
-const parallelCons = 2
+const parallelCons = 4
 
 var disconnectEV = newAsyncEvent()
 var activeCons = 0
@@ -47,15 +47,9 @@ proc standAloneChain(){.async.} =
     trace "Initiating connection"
     {.cast(raises: []), gcsafe.}:
         try:
-            var ws_r = await connect().wait(3.seconds)
-            var ws_w =
-                try:
-                    await connect().wait(3.seconds)
-                except:
-                    asyncSpawn ws_r.close()
-                    raise
+            var ws = await connect().wait(3.seconds)
             var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
-            var ws_adapter = newWebsocketAdapter(socketr = ws_r, socketw = ws_w, store = publicStore,
+            var ws_adapter = newWebsocketAdapter(socket = ws, store = publicStore,
             onClose = proc() =
                 {.cast(raises: []), gcsafe.}:
                     dec activeCons; disconnectEV.fire())

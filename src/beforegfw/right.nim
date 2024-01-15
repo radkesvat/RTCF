@@ -10,8 +10,6 @@ logScope:
     topic = "Iran RightSide"
 
 var foundpeer = false
-var sw: WSSession = nil
-var sr: WSSession = nil
 
 var activeCons = 0
 
@@ -42,21 +40,16 @@ proc handle(request: HttpRequest) {.async.} =
         # trace "Websocket handshake completed"
         info "Got Websocket connection !"
         {.cast(raises: []), gcsafe.}:
-            if sw == nil:
-                sw = ws
-            else:
-                sr = ws
-                setIsPeerConnected true
-                inc activeCons
-
-                var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
-                var ws_adapter = newWebsocketAdapter(socketr = sr, socketw = sw, store = publicStore, onClose =
-                    proc() =
-                        dec activeCons; if activeCons <= 0: setIsPeerConnected false
-                )
-                mux_adapter.chain(ws_adapter)
-                mux_adapter.signal(both, start)
-                sr = nil; sw = nil
+            setIsPeerConnected true
+            inc activeCons
+            var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = BeforeGfw)
+            var ws_adapter = newWebsocketAdapter(socket = ws, store = publicStore, onClose =
+                proc() =
+                    dec activeCons; if activeCons <= 0: setIsPeerConnected false
+            )
+            mux_adapter.chain(ws_adapter)
+            mux_adapter.signal(both, start)
+            
 
 
 
