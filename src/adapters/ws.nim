@@ -24,12 +24,12 @@ type
         keepAliveFut: Future[void]
         readFut: Future[int]
         writeFut: Future[void]
-
         finished: AsyncEvent
+        writeClosed: bool
 
-const writeTimeOut = 1500.milliseconds
+const writeTimeOut = 700.milliseconds
 const pingInterval = 60.seconds
-
+const closeMagic: uint16 = 0xFFFF
 
 var readQueue = initDeque[StringView](initialSize = 4096)
 
@@ -90,59 +90,67 @@ proc closeRead(socket: WSSession, store: Store, finish: AsyncEvent){.async.} =
 
 proc stop*(self: WebsocketAdapter) =
     proc breakCycle(){.async.} =
-        if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
+    #     if not isNil(self.keepAliveFut): await self.keepAliveFut.cancelAndWait()
 
         if self.writeFut != nil and not self.writeFut.completed():
             try:
                 await self.writeFut
             except:
                 discard
+        await self.socket.stream.closeWait()
+    #     try:
+    #         await self.socket.send(prepareCloseBody(StatusFulfilled, ""), opcode = Opcode.Close)
+    #         echo "ok send close"
+    #     except:
+    #         echo "fail send close"
+    #         discard
 
-        try:
-            await self.socket.send(prepareCloseBody(StatusFulfilled, ""), opcode = Opcode.Close)
-            echo "ok send close"
-        except:
-            echo "fail send close"
-            discard
-
-        if self.readFut != nil and not self.readFut.completed():
-            try:
-                echo "wait for read"
-                discard await self.readFut
-                echo "read done"
-            except:
-                echo "cancel read " , getCurrentException().msg
-                discard
-
-    
-
-        try:
-            echo "here"
-            await self.socket.closeRead(self.store, self.finished).wait(15.seconds)
-            echo "done"
-
-        except:
-            echo "cancel close read"
-
-            discard
+    #     if self.readFut != nil and not self.readFut.completed():
+    #         try:
+    #             echo "wait for read"
+    #             discard await self.readFut
+    #             echo "read done"
+    #         except:
+    #             echo "cancel read " , getCurrentException().msg
+    #             discard
 
 
-    
+
+    #     try:
+    #         echo "here"
+    #         await self.socket.closeRead(self.store, self.finished).wait(15.seconds)
+    #         echo "done"
+
+    #     except:
+    #         echo "cancel close read"
+
+    #         discard
+
         await sleepAsync(5.seconds)
-
-
-
         self.signal(both, breakthrough)
 
     if not self.stopped:
         trace "stopping"
         self.stopped = true
-        self.finished.clear()
         if not isNil(self.onClose): self.onClose()
         asyncSpawn breakCycle()
 
 
 
+template stopByWrite(self: WebsocketAdapter) =
+    if not self.writeClosed:
+        self.writeClosed = true
+        signal(self, both, pause)
+        try:
+            await self.socket.send( @(closeMagic.toBytesBE), Binary)
+        except:
+            discard
+
+    await self.finished.wait()
+
+proc stopByRead(self: WebsocketAdapter) =
+    self.finished.fire()
+    self.stop()
 
 # proc discardRead(self: WebsocketAdapter){.async.} =
 #     var buf = allocShared(20)
@@ -168,13 +176,13 @@ proc keepAlive(self: WebsocketAdapter){.async.} =
 
 
 
-proc init(self: WebsocketAdapter, name: string, socket: WSSession,  store: Store, onClose: CloseCb) {.raises: [].} =
+proc init(self: WebsocketAdapter, name: string, socket: WSSession, store: Store, onClose: CloseCb) {.raises: [].} =
     procCall init(Adapter(self), name, hsize = 0)
     self.socket = socket
     self.store = store
     self.onClose = onClose
     self.finished = newAsyncEvent()
-    self.finished.fire()
+    self.finished.clear()
 
 proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, store: Store,
         onClose: CloseCb): WebsocketAdapter {.raises: [].} =
@@ -185,9 +193,8 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, 
 
 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
-
     try:
-        if self.stopped: raise FlowCloseError()
+        if self.writeClosed or self.stopped: raise FlowCloseError()
         var size: uint16 = rp.len.uint16
         rp.shiftl 2
         rp.write(size)
@@ -204,10 +211,7 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
 
             trace "written bytes to ws socket", bytes = byteseq.len
     except CatchableError as e:
-        self.stop()
-        signal(self,both,pause)
-        if not self.finished.isSet():
-            await self.finished.wait()
+        self.stopByWrite()
         raise e
 
 
@@ -231,6 +235,8 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
             var size_header_read = await self.readFut
             if size_header_read != 2: raise FlowCloseError()
 
+            if size == closeMagic: raise FlowCloseError()
+
             sv.reserve size.int
             var payload_size = await self.socket.recv(cast[ptr byte](sv.buf), size.int)
             if payload_size == 0: raise FlowCloseError()
@@ -240,13 +246,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 
     except CatchableError as e:
         self.store.reuse move sv
-        self.stop()
-        # if not self.finished.isSet():
-        #     # self.readCompleteEv.fire()
-        #     echo "waiting for finish"
-        #     await self.finished.wait()
-        #     echo "waiting for finish"
-
+        self.stopByRead()
         raise e
 
 

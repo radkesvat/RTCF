@@ -110,7 +110,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
 
     proc stopLoops(){.async.} =
         # self.handles.apply do(x: Future[void]): cancelSoon x
-        # if not isNil(self.restoreFut): await cancelAndWait(self.restoreFut)
+        if not isNil(self.restoreFut): await cancelAndWait(self.restoreFut)
         if not isNil(self.acceptConnectionFut): await cancelAndWait(self.acceptConnectionFut)
         if not isNil(self.readloopFut): await cancelAndWait(self.readloopFut)
 
@@ -129,6 +129,7 @@ proc stop*(self: MuxAdapetr, sendclose: bool = true) =
         asyncSpawn stopLoops()
 
 proc pause*(self: MuxAdapetr) =
+    if not isNil(self.restoreFut): cancelSoon(self.restoreFut)
     if not isNil(self.acceptConnectionFut): cancelSoon(self.acceptConnectionFut)
    
 

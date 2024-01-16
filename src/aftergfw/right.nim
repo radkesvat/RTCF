@@ -38,7 +38,7 @@ proc connect(): Future[WSSession] {.async.} =
 
             return ws
         except [WebSocketError, HttpError]:
-            var e = getCurrentException()   
+            var e = getCurrentException()
             error "Websocket error", name = e.name, msg = e.msg
             raise e
 
