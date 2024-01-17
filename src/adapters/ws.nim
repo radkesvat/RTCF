@@ -27,7 +27,7 @@ type
         finished: AsyncEvent
         writeClosed: bool
 
-const writeTimeOut = 700.milliseconds
+const writeTimeOut = 900.milliseconds
 const pingInterval = 60.seconds
 const closeMagic: uint16 = 0xFFFF
 
@@ -140,7 +140,6 @@ proc stop*(self: WebsocketAdapter) =
 template stopByWrite(self: WebsocketAdapter) =
     if not self.writeClosed:
         self.writeClosed = true
-        signal(self, both, pause)
         try:
             await self.socket.send( @(closeMagic.toBytesBE), Binary)
         except:
@@ -203,6 +202,7 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
             var timeout = sleepAsync(writeTimeOut)
             if (await race(self.writeFut, timeout)) == timeout:
                 self.store.reuse rp
+                signal(self, both, pause)
                 await self.writeFut
                 raise newException(AsyncTimeoutError, "write timed out")
             else:

@@ -46,7 +46,7 @@ const
     CidHeaderLen = 2
     MuxHeaderLen = CidHeaderLen
     ConnectionChanFixedSizeW = 1
-    ConnectionChanFixedSizeR = 3000 # * 40 (per con)
+    ConnectionChanFixedSizeR = -1 
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -301,7 +301,7 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
                                 # channel is half closed ...
                                 globalLock.release()
                                 self.store.reuse move data
-                                warn "read loop was about to write data to a half closed chanenl!", msg = e.msg, cid = cid
+                                warn "read loop was about to write data to a half closed channel!", msg = e.msg, cid = cid
                                 break operation
                         else:
                             globalLock.release()
