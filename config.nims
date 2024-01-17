@@ -36,89 +36,10 @@ template require(package: untyped) =
             let ast {.inject.} = astToStr(package)
             exec &"nimble -l install --nimbleDir:{nimble_path} {ast} -y"
 
-task build_libpcap, "bulid libpcap x64 static":
-    when defined(windows):
-        warning "This requires: Visual Studio 2015 or later,GNU Make+gcc , Chocolatey , CMake, Winflexbison, Git. " &
-        "I have already downloaded and set these things up in /libs folder but some tools are executeables and " &
-        "are required to be installed on your system before the build happens. more info at: " &
-        "(https://github.com/the-tcpdump-group/libpcap/blob/libpcap-1.10.4/doc/README.Win32.md)"
 
-        exec "gcc --version"
-        exec "cmake --version"
-        exec "make --version"
-
-        withDir "libs/libpcap/":
-            exec """cmake "-DPacket_ROOT=..\npcap-sdk" -G "MinGW Makefiles" -D CMAKE_C_COMPILER=gcc -D CMAKE_CXX_COMPILER=g++ ."""
-            exec """make clean"""
-            exec """make"""
-            cpFile("libpcap.a", ".."/"libpcap.a")
-
-            # exec """msbuild pcap.sln /m /property:Configuration=Release"""
-
-    else:
-
-        warning "This requires: build tools (gcc+make),autoconf, CMake, Git. " &
-        "I have already downloaded and set these things up in /libs folder but some tools are executeables and " &
-        "are required to be installed on your system before the build happens. more info at: " &
-        "https://github.com/the-tcpdump-group/libpcap/blob/master/INSTALL.md"
-
-        #check for tools that must be installed
-        exec "cmake --version"
-        exec "autoconf --version"
-        exec "flex --version"
-        exec "bison --version"
-        exec "gcc --version"
-        exec "make --version"
-
-        withDir "libs/libpcap/":
-            ### autogen way
-            exec "./autogen.sh"
-            exec "./configure"
-            exec """make clean"""
-            exec "make"
-            cpFile("libpcap.a", ".."/"libpcap.a")
-
-            ### cmake way
-            # exec "mkdir bulid"
-            # withDir "bulid":
-            #     exec """cmake "-DPacket_ROOT=${projectDir}\..\npcap-sdk" -G "Unix Makefiles" -D CMAKE_C_COMPILER=gcc -D CMAKE_CXX_COMPILER=g++ .."""
-            # exec "make"
-
-task build_libnet, "builds libnet(1.2) x64 static":
-    when defined(windows):
-        hint " You need to do extra steps to be able to build, you have to generate and run configure script before running this command"
-        # Mysis Mingw64
-        # pacman -Syu --noconfirm
-        # pacman -S --noconfirm git wget tar gzip autoconf automake make libtool patch unzip xz bison flex pkg-config
-        # pacman -S --noconfirm mingw-w64-x86_64-gcc
-        # ./autogen.sh
-        # CFLAGS="-I../win32/wpdpack/Include/" LDFLAGS="-L../win32/wpdpack/Lib/x64/ -Lwin32/wpdpack/Lib/x64/" ./configure --prefix=/mingw64 --disable-shared
-        exec "gcc --version"
-        exec "make --version"
-
-        withDir "libs/libnet/":
-            if not fileExists("Makefile"):
-                error "[Error] you did not generate the MakeFile, read the docs for a how-to guide." &
-                "unfortunately these steps required software installation and i couldnt script them."
-
-            exec """make clean"""
-            exec """make"""
-            cpFile("src"/".libs"/"libnet.a", ".."/"libnet.a")
-    else:
-        warning "[Notice] you need full gcc toolchain to be installed such as: " &
-        "gcc git wget tar gzip autoconf automake make libtool patch unzip xz bison flex pkg-config"
-
-        exec "gcc --version"
-        exec "make --version"
-        exec "automake --version"
-        exec "libtool --version"
-        withDir "libs/libnet/":
-            exec "./autogen.sh"
-            exec "./configure --disable-shared"
-            exec """make clean"""
-            exec "make"
 
 task install, "install nim deps":
+    require illwill
     require jsony
     require secp256k1
     require malebolgia
@@ -145,11 +66,6 @@ task install, "install nim deps":
     exec "git submodule update --recursive"
     hint "Finished prepairing required tools."
 
-    echo "\n"
-    echo "[Notice] In order build this project , you have to build libnet and libpcap"
-    echo "run: nim build_libpcap"
-    echo "then: nim build_libnet"
-    echo "then: nim build\n"
 
 template sharedBuildSwitches(){.dirty.} =
 
