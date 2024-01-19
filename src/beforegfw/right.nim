@@ -55,6 +55,8 @@ proc handle(request: HttpRequest) {.async.} =
 
     except WebSocketError as e:
         error "Websocket error", name = e.name, msg = e.msg
+    except CatchableError as e:
+        error "Websocket Handle error", name = e.name, msg = e.msg
 
 
 
@@ -78,7 +80,7 @@ proc startWebsocketServer(threadID: int) {.async.} =
             while true:
                 try:
                     let req = await server.accept()
-                    await req.handle()
+                    asyncSpawn req.handle()
                 except CatchableError as e:
                     error "Https Accept error", name = e.name, msg = e.msg
 

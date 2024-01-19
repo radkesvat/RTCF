@@ -90,10 +90,12 @@ proc start(self: PortTunnel) =
                 # getSockOpt(sock.fd, sol, int(SO_ORIGINAL_DST), cast[var pointer](addr objbuf[0]), size) chronos mistakes ?
                 if -1 == osdefs.getsockopt(SocketHandle(sock.fd), cint(sol), cint(SO_ORIGINAL_DST),
                               addr objbuf[0], addr(size)):
-                    trace "multiport failure getting origin port. !"
-                    raise newException(AssertionDefect, "multiport failure getting origin port. !")
-
-                bigEndian16(addr self.writePort, addr objbuf[2])
+                    error "multiport failure getting origin port. !"
+                    self.writePort = 65500.Port
+                    return
+                    # raise newException(AssertionDefect, "multiport failure getting origin port. !")
+                else:
+                    bigEndian16(addr self.writePort, addr objbuf[2])
 
                 trace "Multiport ", port = self.writePort
         

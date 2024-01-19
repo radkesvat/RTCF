@@ -46,7 +46,7 @@ const
     CidHeaderLen = 2
     MuxHeaderLen = CidHeaderLen
     ConnectionChanFixedSizeW = 1
-    ConnectionChanFixedSizeR = -1 
+    ConnectionChanFixedSizeR = 1 shl 13
 
 
 var globalTable: ptr UncheckedArray[DualChan]
@@ -257,28 +257,6 @@ proc readloop(self: MuxAdapetr, whenNotFound: CidNotExistBehaviour){.async.} =
             var cid: Cid = 0
             copyMem(addr cid, data.buf, sizeof(cid))
             var size = data.len - sizeof(Cid)
-
-
-            # copyMem(addr size, data.buf.offset sizeof(cid), sizeof(size))
-
-            # data = if size > 0:
-            #         var rse = await procCall read(Tunnel(self), size.int)
-            #         sv.shiftl sizeof(size)
-            #         rse.shiftl sizeof(size); copyMem(rse.buf, sv.buf, sizeof(size))
-            #         sv.shiftl sizeof(cid)
-            #         rse.shiftl sizeof(cid); copyMem(rse.buf, sv.buf, sizeof(cid))
-            #         self.store.reuse move sv
-            #         rse
-            #     else:
-            #         sv.shiftl MuxHeaderLen; sv
-
-
-            # if self.location == AfterGfw and not self.firstReadDone:
-            #     self.firstReadDone = true
-            #     if cid == 0: resetAllCons()
-                # while globalTableHas(0):
-                #     notice "waiting for table reset..."
-                #     await sleepAsync(200)
 
 
 
@@ -519,7 +497,7 @@ method read*(self: MuxAdapetr, bytes: int, chain: Chains = default): Future[Stri
 
         if size.int < bytes:
             trace "closing read channel.", size = size
-            self.store.reuse move sv
+            self.store.reuse sv
             self.stop(false)
             raise newException(CancelledError, message = "read close, size: " & $size)
 

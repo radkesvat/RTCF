@@ -166,7 +166,7 @@ proc readloop(self: ConnectorAdapter){.async.} =
             error "Readloop Unexpected Error, [Write]", name = e.name, msg = e.msg
             quit(1)
         finally:
-            self.store.reuse move sv
+            self.store.reuse  sv
 
 
 
