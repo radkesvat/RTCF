@@ -20,15 +20,15 @@ type
         socket: WSSession
         store: Store
         onClose: CloseCb
-        discardReadFut: Future[void]
-        keepAliveFut: Future[void]
         readFut: Future[int]
         writeFut: Future[void]
         finished: AsyncEvent
         writeClosed: bool
+        establishment:Future[void]
 
-const writeTimeOut = 900.milliseconds
-const pingInterval = 60.seconds
+
+const writeTimeOut = 200.milliseconds
+const minimumPing = 180.milliseconds
 const closeMagic: uint16 = 0xFFFF
 
 
@@ -49,8 +49,9 @@ proc stop*(self: WebsocketAdapter) =
                 await self.writeFut
             except:
                 discard
+        await sleepAsync(2.seconds)
         await self.socket.stream.closeWait()
-        await sleepAsync(5.seconds)
+        await sleepAsync(2.seconds)
         self.signal(both, breakthrough)
 
     if not self.stopped:
@@ -72,8 +73,8 @@ template stopByWrite(self: WebsocketAdapter) =
     await self.finished.wait()
 
 proc stopByRead(self: WebsocketAdapter) =
-    self.finished.fire()
     self.stop()
+    self.finished.fire()
 
 # proc discardRead(self: WebsocketAdapter){.async.} =
 #     var buf = allocShared(20)
@@ -89,14 +90,27 @@ proc stopByRead(self: WebsocketAdapter) =
 proc keepAlive(self: WebsocketAdapter){.async.} =
     while not self.stopped:
         try:
-            await self.socket.ping(@[1.byte])
-            await self.socket.ping(@[1.byte])
-            await sleepAsync(pingInterval)
-
+            await self.socket.ping(@[1.byte]).wait(writeTimeOut)
         except:
             error "Failed to ping socket"
             self.stop()
 
+proc checkPing(self:WebsocketAdapter){.async.}=
+    self.establishment = newFuture[void]()
+    try:
+        await self.socket.ping(@[1.byte]).wait(writeTimeOut)
+    except:
+        try:
+            error "Failed to ping socket"
+            self.writeClosed = true
+            if self.writeFut != nil and not self.writeFut.completed():
+                await self.writeFut.cancelAndWait()
+            if self.readFut != nil and not self.readFut.completed():
+                await self.readFut.cancelAndWait()
+            if not self.stopped:
+                self.stopByRead()
+        except:
+            discard
 
 
 proc init(self: WebsocketAdapter, name: string, socket: WSSession, store: Store, onClose: CloseCb) {.raises: [].} =
@@ -106,6 +120,7 @@ proc init(self: WebsocketAdapter, name: string, socket: WSSession, store: Store,
     self.onClose = onClose
     self.finished = newAsyncEvent()
     self.finished.clear()
+    asyncSpawn checkPing(self)
 
 proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, store: Store,
         onClose: CloseCb): WebsocketAdapter {.raises: [].} =
@@ -118,6 +133,8 @@ proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, 
 method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): Future[void] {.async.} =
     try:
         if self.writeClosed or self.stopped: raise FlowCloseError()
+        if not self.establishment.finished(): await self.establishment
+
         var size: uint16 = rp.len.uint16
         rp.shiftl 2
         rp.write(size)
@@ -146,22 +163,24 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     var size: uint16 = 0
     try:
         if self.stopped: raise FlowCloseError()
+        if not self.establishment.finished(): await self.establishment
 
         trace "asking for ", bytes = bytes
 
-        while true:
-            self.readFut = self.socket.recv(cast[ptr byte](addr size), 2)
-            var size_header_read = await self.readFut
-            if size_header_read != 2: raise FlowCloseError()
+        self.readFut = self.socket.recv(cast[ptr byte](addr size), 2)
+        var size_header_read = await self.readFut
 
-            if size == closeMagic: raise FlowCloseError()
+        if size_header_read != 2: raise FlowCloseError()
 
-            sv.reserve size.int
-            var payload_size = await self.socket.recv(cast[ptr byte](sv.buf), size.int)
-            if payload_size < size.int: raise FlowCloseError()
+        if size == closeMagic: 
+            echo "clase magic"
+            raise FlowCloseError()
 
-            trace "received ", bytes = payload_size
-            return sv
+        sv.reserve size.int
+        var payload_size = await self.socket.recv(cast[ptr byte](sv.buf), size.int)
+        if payload_size < size.int: raise FlowCloseError()
+        trace "received ", bytes = payload_size
+        return sv
 
     except CatchableError as e:
         if not sv.isNil: self.store.reuse sv
