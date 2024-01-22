@@ -47,7 +47,19 @@ proc standAloneChain(){.async.} =
     trace "Initiating connection"
     {.cast(raises: []), gcsafe.}:
         try:
-            var ws = await connect().wait(3.seconds)
+            var timeout = sleepAsync(2.seconds)
+            var wsf = connect()
+            if (await race(wsf, timeout)) == timeout:
+                wsf.cancelSoon()
+                wsf.addCallback(proc (udata:pointer) =
+                    if wsf.finished() and not wsf.failed():
+                        if wsf.value() != nil:
+                            wsf.value().stream.close()
+                )
+
+                raise newException(AsyncTimeoutError, "timeed out")
+            if wsf.failed(): raise wsf.error()
+            let ws = wsf.value()
             var mux_adapter = newMuxAdapetr(master = masterChannel, store = publicStore, loc = AfterGfw)
             var ws_adapter = newWebsocketAdapter(socket = ws, store = publicStore,
             onClose = proc() =

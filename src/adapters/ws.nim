@@ -24,11 +24,12 @@ type
         writeFut: Future[void]
         finished: AsyncEvent
         writeClosed: bool
-        establishment:Future[void]
+        establishment: Future[void]
+        pingStart: Moment
 
 
-const writeTimeOut = 200.milliseconds
-const minimumPing = 180.milliseconds
+const writeTimeOut = 4500.milliseconds
+const maxPing = 220.milliseconds
 const closeMagic: uint16 = 0xFFFF
 
 
@@ -49,8 +50,8 @@ proc stop*(self: WebsocketAdapter) =
                 await self.writeFut
             except:
                 discard
-        await sleepAsync(2.seconds)
         await self.socket.stream.closeWait()
+        await sleepAsync(2.seconds)
         await sleepAsync(2.seconds)
         self.signal(both, breakthrough)
 
@@ -95,20 +96,19 @@ proc keepAlive(self: WebsocketAdapter){.async.} =
             error "Failed to ping socket"
             self.stop()
 
-proc checkPing(self:WebsocketAdapter){.async.}=
-    self.establishment = newFuture[void]()
+
+
+proc checkPing(self: WebsocketAdapter){.async.} =
+    self.pingStart=Moment.now()
     try:
-        await self.socket.ping(@[1.byte]).wait(writeTimeOut)
+        var data = newSeq[byte](len = 100)
+        await self.socket.ping(data).wait(1.seconds)
     except:
         try:
-            error "Failed to ping socket"
+            error "Failed to ping socket", name = getCurrentException().name
             self.writeClosed = true
-            if self.writeFut != nil and not self.writeFut.completed():
-                await self.writeFut.cancelAndWait()
-            if self.readFut != nil and not self.readFut.completed():
-                await self.readFut.cancelAndWait()
-            if not self.stopped:
-                self.stopByRead()
+            self.stopByRead()
+            self.establishment.fail(FlowCloseError())
         except:
             discard
 
@@ -120,6 +120,19 @@ proc init(self: WebsocketAdapter, name: string, socket: WSSession, store: Store,
     self.onClose = onClose
     self.finished = newAsyncEvent()
     self.finished.clear()
+    self.establishment = newFuture[void]()
+
+    self.socket.onPong = proc(data: openArray[byte])=
+        if self.stopped or self.establishment.finished(): return
+        if self.pingStart + maxPing > Moment.now():
+            self.establishment.complete()
+        else:
+            error "Ping TimedOut ", delta = $((Moment.now() - self.pingStart).milliseconds)
+            self.writeClosed = true
+            if not isNil(self.readFut):self.readFut.cancelSoon()
+            self.stopByRead()
+            self.establishment.fail(FlowCloseError())
+
     asyncSpawn checkPing(self)
 
 proc newWebsocketAdapter*(name: string = "WebsocketAdapter", socket: WSSession, store: Store,
@@ -145,6 +158,7 @@ method write*(self: WebsocketAdapter, rp: StringView, chain: Chains = default): 
                 signal(self, both, pause)
                 await self.writeFut
                 self.store.reuse rp
+                if not isNil(self.readFut):self.readFut.cancelSoon()
                 raise newException(AsyncTimeoutError, "write timed out")
             else:
                 self.store.reuse rp
@@ -163,7 +177,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
     var size: uint16 = 0
     try:
         if self.stopped: raise FlowCloseError()
-        if not self.establishment.finished(): await self.establishment
+        # if not self.establishment.finished(): await self.establishment
 
         trace "asking for ", bytes = bytes
 
@@ -172,8 +186,7 @@ method read*(self: WebsocketAdapter, bytes: int, chain: Chains = default): Futur
 
         if size_header_read != 2: raise FlowCloseError()
 
-        if size == closeMagic: 
-            echo "clase magic"
+        if size == closeMagic:
             raise FlowCloseError()
 
         sv.reserve size.int
